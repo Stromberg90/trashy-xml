@@ -8,6 +8,7 @@ edition = "2018"
 documentation = "https://docs.rs/trashy-xml"
 repository = "https://github.com/Stromberg90/trashy-xml"
 
+readme = "README.md"
 keywords = ["xml", "parser"]
 categories = ["parsing", "text-processing"]
 license = "MIT"
