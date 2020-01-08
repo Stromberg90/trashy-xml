@@ -1,0 +1,20 @@
+[package]
+name = "trashy-xml"
+version = "0.1.0"
+authors = ["Andreas Strømberg<andreas.stromberg90@gmail.com>"]
+description = "Less than stellar xml parser, but does what I need in a \"simple\" way"
+edition = "2018"
+
+documentation = "https://docs.rs/trashy-xml"
+repository = "https://github.com/Stromberg90/trashy-xml"
+
+keywords = ["xml", "parser"]
+categories = ["parsing", "text-processing"]
+license = "MIT"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "benchmarks"
+harness = false
