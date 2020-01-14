@@ -2,7 +2,6 @@ use std::char;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::prelude::*;
-use std::io::{BufReader, Bytes};
 
 #[derive(Debug, PartialEq)]
 enum TokenKind {
@@ -693,9 +692,6 @@ impl XmlParser {
         }
     }
 }
-
-// TODO: Implement a find_first_attribute_of(attribute_name, parent_name) that as soon as it finds it returns the value, this is so save execution time by not parsing everything
-// TODO: Implement a rayon iterator
 
 #[cfg(test)]
 mod tests {
