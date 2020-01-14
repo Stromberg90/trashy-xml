@@ -71,7 +71,7 @@ pub struct XmlError {
 #[derive(Debug)]
 pub struct XmlParser {
     position: FilePosition,
-    stream: std::iter::Peekable<Bytes<BufReader<File>>>,
+    stream: std::iter::Peekable<std::vec::IntoIter<u8>>,
     raw_tokens: Vec<Token>,
     pub xml_tokens: Vec<XmlToken>,
     pub errors: Vec<XmlError>,
@@ -181,14 +181,14 @@ fn is_key_char(c: char) -> bool {
 mod lexer {
     use super::*;
     pub fn peek(xml_parser: &mut XmlParser) -> Option<char> {
-        if let Some(Ok(character)) = xml_parser.stream.peek() {
+        if let Some(character) = xml_parser.stream.peek() {
             return Some(*character as char);
         }
         None
     }
 
     pub fn next(xml_parser: &mut XmlParser) -> Option<char> {
-        if let Some(Ok(character)) = xml_parser.stream.next() {
+        if let Some(character) = xml_parser.stream.next() {
             match character as char {
                 '\r' => {
                     if let Some(v) = peek(xml_parser) {
@@ -259,11 +259,14 @@ impl Iterator for XmlParser {
 impl XmlParser {
     /// Constructs a new `XmlParser`.
     pub fn new(filepath: &str) -> XmlParser {
+        let mut buffer = Vec::new();
+        File::open(filepath)
+            .unwrap()
+            .read_to_end(&mut buffer)
+            .unwrap();
         XmlParser {
             position: FilePosition::new(),
-            stream: std::io::BufReader::new(File::open(filepath).unwrap())
-                .bytes()
-                .peekable(),
+            stream: buffer.into_iter().peekable(),
             raw_tokens: Vec::new(),
             xml_tokens: Vec::new(),
             errors: Vec::new(),
