@@ -396,7 +396,7 @@ dependencies = [
 
 [[package]]
 name = "trashy-xml"
-version = "0.1.1"
+version = "0.2.1"
 dependencies = [
  "criterion 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]

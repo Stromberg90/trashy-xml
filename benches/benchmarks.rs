@@ -26,7 +26,7 @@ fn large_file_token_length() -> usize {
 fn large_file_first_attribute() -> usize {
     let attribute_name = "towel";
     let mut parser = XmlParser::new("sample_files/large.xml");
-    let attribute = parser.get_first_attribute_of_lossy(attribute_name, Some("Text"));
+    let _ = parser.get_first_attribute_of_lossy(attribute_name, Some("Text"));
     return parser.xml_tokens.len();
 }
 

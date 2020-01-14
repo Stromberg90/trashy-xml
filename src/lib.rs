@@ -306,10 +306,8 @@ impl XmlParser {
 
         self.raw_tokens = self.collect();
 
-        // }
         let mut open_element_index_stack = VecDeque::<usize>::new();
         let mut raw_token_index = 0;
-        // while let Some(raw_token) = self.next() {
         while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
             match &raw_token.kind {
                 Text(attribute_name) => {
