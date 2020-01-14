@@ -372,22 +372,21 @@ impl XmlParser {
                             }
                         }
                         if attribute_name == attribute {
-                            if parent.is_some()
-                                && open_element_index_stack.front().copied().is_some()
-                            {
-                                if let XmlKind::OpenElement(element_name, _) = &self.xml_tokens
-                                    [open_element_index_stack.front().copied().unwrap()]
-                                .kind
-                                {
-                                    if element_name == parent.unwrap() {
-                                        return Some(XmlToken {
-                                            kind: Attribute(
-                                                attribute_name.to_owned(),
-                                                attribute_value.to_owned(),
-                                            ),
-                                            position,
-                                            parent: open_element_index_stack.front().copied(),
-                                        });
+                            if let Some(parent_name) = parent {
+                                if let Some(parent_id) = open_element_index_stack.front().copied() {
+                                    if let XmlKind::OpenElement(element_name, _) =
+                                        &self.xml_tokens[parent_id].kind
+                                    {
+                                        if element_name == parent_name {
+                                            return Some(XmlToken {
+                                                kind: Attribute(
+                                                    attribute_name.to_owned(),
+                                                    attribute_value,
+                                                ),
+                                                position,
+                                                parent: Some(parent_id),
+                                            });
+                                        }
                                     }
                                 }
                             }
@@ -452,7 +451,7 @@ impl XmlParser {
             }
             raw_token_index += 1;
         }
-        return None;
+        None
     }
 
     pub fn parse(&mut self) {
