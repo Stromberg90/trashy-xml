@@ -3,9 +3,7 @@ use trashy_xml::{XmlKind, XmlMethods, XmlParser};
 
 fn small_file_attributes() -> usize {
     let mut result = 0;
-    let mut parser = XmlParser::new(
-        "C:/Users/Stromberg/Desktop/Temp/trashy_xml_test/sample_files/small_test.xml",
-    );
+    let mut parser = XmlParser::new("sample_files/small.xml");
     parser.parse();
     for token in &parser.xml_tokens {
         if let XmlKind::OpenElement(name, _) = &token.kind {
@@ -20,19 +18,27 @@ fn small_file_attributes() -> usize {
 }
 
 fn large_file_token_length() -> usize {
-    let mut parser = XmlParser::new(
-        "C:/Users/Stromberg/Desktop/Temp/trashy_xml_test/sample_files/mondial-3.0.xml",
-    );
+    let mut parser = XmlParser::new("sample_files/large.xml");
     parser.parse();
     return parser.xml_tokens.len();
 }
 
+fn large_file_first_attribute() -> usize {
+    let attribute_name = "towel";
+    let mut parser = XmlParser::new("sample_files/large.xml");
+    let attribute = parser.get_first_attribute_of_lossy(attribute_name, Some("Text"));
+    return parser.xml_tokens.len();
+}
+
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("var_compond_attributes", |b| {
+    c.bench_function("small_file_attributes", |b| {
         b.iter(|| small_file_attributes())
     });
     c.bench_function("large_file_token_length", |b| {
         b.iter(|| large_file_token_length())
+    });
+    c.bench_function("large_file_first_attribute", |b| {
+        b.iter(|| large_file_first_attribute())
     });
 }
 

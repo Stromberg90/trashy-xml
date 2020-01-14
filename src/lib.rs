@@ -296,6 +296,167 @@ impl XmlParser {
             && self.raw_tokens[index + 1].kind == TokenKind::KeyChar(character)
     }
 
+    pub fn get_first_attribute_of_lossy(
+        &mut self,
+        attribute: &str,
+        parent: Option<&str>,
+    ) -> Option<XmlToken> {
+        use TokenKind::*;
+        use XmlKind::*;
+
+        self.raw_tokens = self.collect();
+
+        // }
+        let mut open_element_index_stack = VecDeque::<usize>::new();
+        let mut raw_token_index = 0;
+        // while let Some(raw_token) = self.next() {
+        while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
+            match &raw_token.kind {
+                Text(attribute_name) => {
+                    let position = raw_token.position;
+                    if open_element_index_stack.is_empty() {
+                        raw_token_index += 1;
+                        continue;
+                    }
+                    raw_token_index += 1;
+
+                    let mut skip_loop = false;
+                    while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
+                        match raw_token.kind {
+                            KeyChar('=') => {
+                                break;
+                            }
+                            Whitespace(_) => {
+                                raw_token_index += 1;
+                            }
+                            _ => {
+                                raw_token_index += 1;
+                                skip_loop = true;
+                                break;
+                            }
+                        }
+                    }
+                    raw_token_index += 1;
+                    if raw_token_index >= self.raw_tokens.len() {
+                        break;
+                    }
+                    if skip_loop {
+                        continue;
+                    }
+                    while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
+                        match &raw_token.kind {
+                            KeyChar('"') | KeyChar('\'') => {
+                                break;
+                            }
+                            Whitespace(_) => {
+                                raw_token_index += 1;
+                            }
+                            _ => {
+                                raw_token_index += 1;
+                                break;
+                            }
+                        }
+                    }
+                    if let KeyChar(boundary_character) = self.raw_tokens[raw_token_index].kind {
+                        let mut attribute_value = String::new();
+                        loop {
+                            raw_token_index += 1;
+                            match &self.raw_tokens[raw_token_index].kind {
+                                KeyChar(key_char) => {
+                                    if *key_char == boundary_character {
+                                        break;
+                                    }
+                                    attribute_value.push(*key_char);
+                                }
+                                Text(text) | Whitespace(text) => {
+                                    attribute_value.push_str(text);
+                                }
+                            }
+                        }
+                        if attribute_name == attribute {
+                            if parent.is_some()
+                                && open_element_index_stack.front().copied().is_some()
+                            {
+                                if let XmlKind::OpenElement(element_name, _) = &self.xml_tokens
+                                    [open_element_index_stack.front().copied().unwrap()]
+                                .kind
+                                {
+                                    if element_name == parent.unwrap() {
+                                        return Some(XmlToken {
+                                            kind: Attribute(
+                                                attribute_name.to_owned(),
+                                                attribute_value.to_owned(),
+                                            ),
+                                            position,
+                                            parent: open_element_index_stack.front().copied(),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                KeyChar('<') => {
+                    if self.match_next_str(raw_token_index, "!--") {
+                        raw_token_index += 4;
+                        while self.raw_tokens.get(raw_token_index + 1).is_some() {
+                            if self.match_next_str(raw_token_index, "-->") {
+                                raw_token_index += 3;
+                                break;
+                            }
+                            raw_token_index += 1;
+                        }
+                    } else if let Some(raw_token) = self.raw_tokens.get(raw_token_index + 1) {
+                        let position = raw_token.position;
+                        match &raw_token.kind {
+                            Text(text) => {
+                                let token = XmlToken {
+                                    kind: OpenElement(text.to_owned(), self.xml_tokens.len()),
+                                    position,
+                                    parent: open_element_index_stack.front().copied(),
+                                };
+                                self.xml_tokens.push(token);
+                                open_element_index_stack.push_front(self.xml_tokens.len() - 1);
+                                raw_token_index += 1;
+                            }
+                            KeyChar('/') => {
+                                if let Some(raw_token) = self.raw_tokens.get(raw_token_index + 2) {
+                                    if let Text(_) = &raw_token.kind {
+                                        open_element_index_stack.pop_front();
+                                        raw_token_index += 2;
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                KeyChar('/') => {
+                    if self.match_next_char(raw_token_index, '>') {
+                        open_element_index_stack.pop_front();
+                    }
+                }
+                KeyChar('>') => {
+                    raw_token_index += 1;
+                    while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
+                        match &raw_token.kind {
+                            KeyChar('<') => {
+                                raw_token_index -= 1;
+                                break;
+                            }
+                            _ => {
+                                raw_token_index += 1;
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+            raw_token_index += 1;
+        }
+        return None;
+    }
+
     pub fn parse(&mut self) {
         use TokenKind::*;
         use XmlKind::*;
@@ -533,6 +694,9 @@ impl XmlParser {
     }
 }
 
+// TODO: Implement a find_first_attribute_of(attribute_name, parent_name) that as soon as it finds it returns the value, this is so save execution time by not parsing everything
+// TODO: Implement a rayon iterator
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -571,5 +735,17 @@ mod tests {
         assert_eq!(parser.xml_tokens.len(), 368284);
         assert_eq!(parser.raw_tokens.len(), 1118488);
         assert_eq!(parser.errors.len(), 0);
+    }
+
+    #[test]
+    fn large_file_first_attribute_check() {
+        let attribute_name = "towel";
+        let mut parser = XmlParser::new("sample_files/large.xml");
+        let attribute = parser.get_first_attribute_of_lossy(attribute_name, Some("Text"));
+        assert!(attribute.is_some());
+        match &attribute.unwrap().kind {
+            XmlKind::Attribute(name, _) => assert_eq!(name, attribute_name),
+            _ => panic!(),
+        }
     }
 }
