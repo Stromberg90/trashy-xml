@@ -2,6 +2,7 @@ use std::char;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::prelude::*;
+use std::path::Path;
 
 #[derive(Debug, PartialEq)]
 enum TokenKind {
@@ -257,7 +258,7 @@ impl Iterator for XmlParser {
 
 impl XmlParser {
     /// Constructs a new `XmlParser`.
-    pub fn new(filepath: &str) -> XmlParser {
+    pub fn new<P: AsRef<Path>>(filepath: P) -> XmlParser {
         let mut buffer = Vec::new();
         File::open(filepath)
             .unwrap()
