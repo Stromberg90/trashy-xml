@@ -23,22 +23,12 @@ fn large_file_token_length() -> usize {
     return parser.xml_tokens.len();
 }
 
-fn large_file_first_attribute() -> usize {
-    let attribute_name = "towel";
-    let mut parser = XmlParser::new("sample_files/large.xml");
-    let _ = parser.get_first_attribute_of_lossy(attribute_name, Some("Text"));
-    return parser.xml_tokens.len();
-}
-
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("small_file_attributes", |b| {
         b.iter(|| small_file_attributes())
     });
     c.bench_function("large_file_token_length", |b| {
         b.iter(|| large_file_token_length())
-    });
-    c.bench_function("large_file_first_attribute", |b| {
-        b.iter(|| large_file_first_attribute())
     });
 }
 

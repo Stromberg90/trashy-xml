@@ -8,9 +8,9 @@ use std::str::FromStr;
 
 #[derive(Debug, PartialEq)]
 enum TokenKind {
-    KeyChar(char),
-    Whitespace(String),
-    Text(String),
+    KeyChar(usize),
+    Whitespace(usize, usize),
+    Text(usize, usize),
 }
 
 #[derive(Debug, PartialEq)]
@@ -105,8 +105,10 @@ pub struct XmlError {
 /// ```
 #[derive(Debug)]
 pub struct XmlParser {
+    index: usize,
+    started_parsing: bool,
     position: FilePosition,
-    stream: std::iter::Peekable<std::vec::IntoIter<u8>>,
+    stream: Vec<u8>,
     raw_tokens: Vec<Token>,
     pub xml_tokens: Vec<XmlToken>,
     pub errors: Vec<XmlError>,
@@ -215,20 +217,24 @@ fn is_key_char(c: char) -> bool {
 
 mod lexer {
     use super::*;
-    pub fn peek(xml_parser: &mut XmlParser) -> Option<char> {
-        if let Some(character) = xml_parser.stream.peek() {
+    pub fn peek(xml_parser: &XmlParser) -> Option<char> {
+        if let Some(character) = xml_parser.stream.get(xml_parser.index + 1) {
             return Some(*character as char);
         }
         None
     }
 
     pub fn next(xml_parser: &mut XmlParser) -> Option<char> {
-        if let Some(character) = xml_parser.stream.next() {
-            match character as char {
+        if xml_parser.started_parsing {
+            xml_parser.index += 1;
+        }
+        xml_parser.started_parsing = true;
+        if let Some(character) = xml_parser.stream.get(xml_parser.index) {
+            match *character as char {
                 '\r' => {
                     if let Some(v) = peek(xml_parser) {
                         if v as char == '\n' {
-                            xml_parser.stream.next();
+                            xml_parser.index += 1;
                             xml_parser.position.line += 1;
                             xml_parser.position.column = 1;
                         }
@@ -242,7 +248,7 @@ mod lexer {
                     xml_parser.position.column += 1;
                 }
             }
-            return Some(character as char);
+            return Some(*character as char);
         }
         None
     }
@@ -254,35 +260,31 @@ impl Iterator for XmlParser {
         if let Some(v) = lexer::next(self) {
             if !is_key_char(v) {
                 if v.is_whitespace() {
-                    let mut whitespace: SmallString<[u8; 16]> = SmallString::new();
-                    whitespace.push(v);
+                    let start_index = self.index;
                     while lexer::peek(self)?.is_whitespace() {
-                        let character = lexer::next(self)?;
-                        whitespace.push(character);
+                        lexer::next(self)?;
                     }
                     return Some(Token {
                         position: self.position,
-                        kind: TokenKind::Whitespace(whitespace.into_string()),
+                        kind: TokenKind::Whitespace(start_index, self.index + 1),
                     });
                 }
-                let mut text: SmallString<[u8; 16]> = SmallString::new();
-                text.push(v);
+                let start_index = self.index;
                 while let Some(peeked_character) = lexer::peek(self) {
                     if !is_key_char(peeked_character) && !peeked_character.is_whitespace() {
                         lexer::next(self).unwrap();
-                        text.push(peeked_character);
                     } else {
                         break;
                     }
                 }
                 Some(Token {
                     position: self.position,
-                    kind: TokenKind::Text(text.into_string()),
+                    kind: TokenKind::Text(start_index, self.index + 1),
                 })
             } else {
                 Some(Token {
                     position: self.position,
-                    kind: TokenKind::KeyChar(v),
+                    kind: TokenKind::KeyChar(self.index),
                 })
             }
         } else {
@@ -296,8 +298,10 @@ impl FromStr for XmlParser {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let input = s.to_owned();
         Ok(XmlParser {
+            index: 0,
+            started_parsing: false,
             position: FilePosition::new(),
-            stream: input.into_bytes().into_iter().peekable(),
+            stream: input.into_bytes(),
             raw_tokens: Vec::new(),
             xml_tokens: Vec::new(),
             errors: Vec::new(),
@@ -314,8 +318,10 @@ impl XmlParser {
             .read_to_end(&mut buffer)
             .unwrap();
         XmlParser {
+            index: 0,
+            started_parsing: false,
             position: FilePosition::new(),
-            stream: buffer.into_iter().peekable(),
+            stream: buffer,
             raw_tokens: Vec::new(),
             xml_tokens: Vec::new(),
             errors: Vec::new(),
@@ -330,11 +336,16 @@ impl XmlParser {
     }
     fn match_next_str(&self, index: usize, characters: &str) -> bool {
         if index + characters.chars().count() < self.raw_tokens.len() {
-            for (token, character) in self.raw_tokens[index + 1..index + characters.chars().count()]
+            for (token, character) in self.raw_tokens
+                [index + 1..index + characters.chars().count() + 1]
                 .iter()
                 .zip(characters.chars())
             {
-                if token.kind != TokenKind::KeyChar(character) {
+                if let TokenKind::KeyChar(kc) = token.kind {
+                    if self.stream[kc] as char != character {
+                        return false;
+                    }
+                } else {
                     return false;
                 }
             }
@@ -344,171 +355,12 @@ impl XmlParser {
         true
     }
     fn match_next_char(&self, index: usize, character: char) -> bool {
-        index + 1 < self.raw_tokens.len()
-            && self.raw_tokens[index + 1].kind == TokenKind::KeyChar(character)
-    }
-
-    pub fn get_first_attribute_of_lossy(
-        &mut self,
-        attribute: &str,
-        parent: Option<&str>,
-    ) -> Option<XmlToken> {
-        use TokenKind::*;
-        use XmlKind::*;
-
-        self.raw_tokens = self.collect();
-
-        let mut open_element_index_stack = VecDeque::<usize>::new();
-        let mut raw_token_index = 0;
-        while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
-            match &raw_token.kind {
-                Text(attribute_name) => {
-                    let position = raw_token.position;
-                    if open_element_index_stack.is_empty() {
-                        raw_token_index += 1;
-                        continue;
-                    }
-                    raw_token_index += 1;
-
-                    let mut skip_loop = false;
-                    while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
-                        match raw_token.kind {
-                            KeyChar('=') => {
-                                break;
-                            }
-                            Whitespace(_) => {
-                                raw_token_index += 1;
-                            }
-                            _ => {
-                                raw_token_index += 1;
-                                skip_loop = true;
-                                break;
-                            }
-                        }
-                    }
-                    raw_token_index += 1;
-                    if raw_token_index >= self.raw_tokens.len() {
-                        break;
-                    }
-                    if skip_loop {
-                        continue;
-                    }
-                    while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
-                        match &raw_token.kind {
-                            KeyChar('"') | KeyChar('\'') => {
-                                break;
-                            }
-                            Whitespace(_) => {
-                                raw_token_index += 1;
-                            }
-                            _ => {
-                                raw_token_index += 1;
-                                break;
-                            }
-                        }
-                    }
-                    if let KeyChar(boundary_character) = self.raw_tokens[raw_token_index].kind {
-                        let mut attribute_value: SmallString<[u8; 16]> = SmallString::new();
-                        loop {
-                            raw_token_index += 1;
-                            match &self.raw_tokens[raw_token_index].kind {
-                                KeyChar(key_char) => {
-                                    if *key_char == boundary_character {
-                                        break;
-                                    }
-                                    attribute_value.push(*key_char);
-                                }
-                                Text(text) | Whitespace(text) => {
-                                    attribute_value.push_str(text);
-                                }
-                            }
-                        }
-                        if attribute_name == attribute {
-                            if let Some(parent_name) = parent {
-                                if let Some(parent_id) = open_element_index_stack.front().copied() {
-                                    if let XmlKind::OpenElement(element_name, _) =
-                                        &self.xml_tokens[parent_id].kind
-                                    {
-                                        if element_name == parent_name {
-                                            return Some(XmlToken {
-                                                kind: Attribute(
-                                                    attribute_name.to_owned(),
-                                                    attribute_value.into_string(),
-                                                ),
-                                                position,
-                                                parent: Some(parent_id),
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                KeyChar('<') => {
-                    if self.match_next_str(raw_token_index, "!--") {
-                        raw_token_index += 4;
-                        while self.raw_tokens.get(raw_token_index + 1).is_some() {
-                            if self.match_next_str(raw_token_index, "-->") {
-                                raw_token_index += 2;
-                                if self.match_next_char(raw_token_index, '>') {
-                                    raw_token_index += 1;
-                                    break;
-                                } else {
-                                    raw_token_index -= 2;
-                                }
-                            }
-                            raw_token_index += 1;
-                        }
-                    } else if let Some(raw_token) = self.raw_tokens.get(raw_token_index + 1) {
-                        let position = raw_token.position;
-                        match &raw_token.kind {
-                            Text(text) => {
-                                let token = XmlToken {
-                                    kind: OpenElement(text.to_owned(), self.xml_tokens.len()),
-                                    position,
-                                    parent: open_element_index_stack.front().copied(),
-                                };
-                                self.xml_tokens.push(token);
-                                open_element_index_stack.push_front(self.xml_tokens.len() - 1);
-                                raw_token_index += 1;
-                            }
-                            KeyChar('/') => {
-                                if let Some(raw_token) = self.raw_tokens.get(raw_token_index + 2) {
-                                    if let Text(_) = &raw_token.kind {
-                                        open_element_index_stack.pop_front();
-                                        raw_token_index += 2;
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                KeyChar('/') => {
-                    if self.match_next_char(raw_token_index, '>') {
-                        open_element_index_stack.pop_front();
-                    }
-                }
-                KeyChar('>') => {
-                    raw_token_index += 1;
-                    while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
-                        match &raw_token.kind {
-                            KeyChar('<') => {
-                                raw_token_index -= 1;
-                                break;
-                            }
-                            _ => {
-                                raw_token_index += 1;
-                            }
-                        }
-                    }
-                }
-                _ => {}
+        if index + 1 < self.raw_tokens.len() {
+            if let TokenKind::KeyChar(kc) = self.raw_tokens[index + 1].kind {
+                return self.stream[kc] as char == character;
             }
-            raw_token_index += 1;
         }
-        None
+        false
     }
 
     // TODO: I should turn xml tokens into a iterator, then I can call cool iterator methods in it, filter out all attributes and such.
@@ -516,13 +368,14 @@ impl XmlParser {
         use TokenKind::*;
         use XmlKind::*;
 
+        // Have raw tokens as a local variable instead of a struct field, I don't need to keep it around right?
         self.raw_tokens = self.collect();
 
         let mut open_element_index_stack = VecDeque::<usize>::new();
         let mut raw_token_index = 0;
         while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
-            match &raw_token.kind {
-                Text(attribute_name) => {
+            match raw_token.kind {
+                Text(start_index, end_index) => {
                     let position = raw_token.position;
                     if open_element_index_stack.is_empty() {
                         self.errors.push(XmlError {
@@ -537,10 +390,12 @@ impl XmlParser {
                     let mut skip_loop = false;
                     while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
                         match raw_token.kind {
-                            KeyChar('=') => {
-                                break;
+                            KeyChar(kc) => {
+                                if self.stream[kc] as char == '=' {
+                                    break;
+                                }
                             }
-                            Whitespace(_) => {
+                            Whitespace(_, _) => {
                                 raw_token_index += 1;
                             }
                             _ => {
@@ -550,7 +405,10 @@ impl XmlParser {
                                         position,
                                         &format!(
                                             "Specification mandates value for attribute {}",
-                                            attribute_name
+                                            std::str::from_utf8(
+                                                &self.stream[start_index..end_index]
+                                            )
+                                            .unwrap()
                                         ),
                                     ),
                                 });
@@ -568,11 +426,14 @@ impl XmlParser {
                         continue;
                     }
                     while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
-                        match &raw_token.kind {
-                            KeyChar('"') | KeyChar('\'') => {
-                                break;
+                        match raw_token.kind {
+                            KeyChar(kc) => {
+                                if self.stream[kc] as char == '"' || self.stream[kc] as char == '\''
+                                {
+                                    break;
+                                }
                             }
-                            Whitespace(_) => {
+                            Whitespace(_, _) => {
                                 raw_token_index += 1;
                             }
                             _ => {
@@ -589,24 +450,32 @@ impl XmlParser {
                         }
                     }
                     if let KeyChar(boundary_character) = self.raw_tokens[raw_token_index].kind {
+                        let boundary_character = self.stream[boundary_character] as char;
                         let mut attribute_value: SmallString<[u8; 16]> = SmallString::new();
                         loop {
                             raw_token_index += 1;
-                            match &self.raw_tokens[raw_token_index].kind {
+                            match self.raw_tokens[raw_token_index].kind {
                                 KeyChar(key_char) => {
-                                    if *key_char == boundary_character {
+                                    let key_char = self.stream[key_char] as char;
+                                    if key_char == boundary_character {
                                         break;
                                     }
-                                    attribute_value.push(*key_char);
+                                    attribute_value.push(key_char);
                                 }
-                                Text(text) | Whitespace(text) => {
-                                    attribute_value.push_str(text);
+                                Text(start_index, end_index)
+                                | Whitespace(start_index, end_index) => {
+                                    attribute_value.push_str(
+                                        std::str::from_utf8(&self.stream[start_index..end_index])
+                                            .unwrap(),
+                                    );
                                 }
                             }
                         }
                         let token = XmlToken {
                             kind: Attribute(
-                                attribute_name.to_owned(),
+                                std::str::from_utf8(&self.stream[start_index..end_index])
+                                    .unwrap()
+                                    .to_owned(),
                                 attribute_value.into_string(),
                             ),
                             position,
@@ -615,138 +484,180 @@ impl XmlParser {
                         self.xml_tokens.push(token);
                     }
                 }
-                KeyChar('<') => {
-                    if self.match_next_str(raw_token_index, "!--") {
-                        raw_token_index += 4;
-                        let position = self.raw_tokens[raw_token_index].position;
-                        let mut comment: SmallString<[u8; 16]> = SmallString::new();
-                        while self.raw_tokens.get(raw_token_index + 1).is_some() {
-                            let raw_token = &self.raw_tokens.get(raw_token_index).unwrap();
-                            match &raw_token.kind {
-                                KeyChar(key_char) => {
-                                    comment.push(*key_char);
+                KeyChar(kc) => match self.stream[kc] as char {
+                    '<' => {
+                        if self.match_next_str(raw_token_index, "!--") {
+                            raw_token_index += 4;
+                            let position = self.raw_tokens[raw_token_index].position;
+                            let mut comment: SmallString<[u8; 16]> = SmallString::new();
+                            while self.raw_tokens.get(raw_token_index + 1).is_some() {
+                                let raw_token = &self.raw_tokens.get(raw_token_index).unwrap();
+                                match raw_token.kind {
+                                    KeyChar(key_char) => {
+                                        comment.push(self.stream[key_char] as char);
+                                    }
+                                    Whitespace(start_index, end_index)
+                                    | Text(start_index, end_index) => {
+                                        comment.push_str(
+                                            std::str::from_utf8(
+                                                &self.stream[start_index..end_index],
+                                            )
+                                            .unwrap(),
+                                        );
+                                    }
                                 }
-                                Whitespace(text) | Text(text) => {
-                                    comment.push_str(text);
-                                }
-                            }
-                            if self.match_next_str(raw_token_index, "-->") {
-                                raw_token_index += 2;
-                                if self.match_next_char(raw_token_index, '>') {
-                                    raw_token_index += 1;
-                                    break;
-                                } else {
-                                    self.errors.push(XmlError {
-                                        position,
-                                        message: XmlParser::formatted_error(
+                                if self.match_next_str(raw_token_index, "--") {
+                                    raw_token_index += 2;
+                                    if self.match_next_char(raw_token_index, '>') {
+                                        raw_token_index += 1;
+                                        break;
+                                    } else {
+                                        self.errors.push(XmlError {
                                             position,
-                                            "-- is not permitted within comments",
+                                            message: XmlParser::formatted_error(
+                                                position,
+                                                "-- is not permitted within comments",
+                                            ),
+                                        });
+                                        raw_token_index -= 2;
+                                    }
+                                }
+                                raw_token_index += 1;
+                            }
+                            let token = XmlToken {
+                                kind: Comment(comment.into_string()),
+                                position,
+                                parent: open_element_index_stack.front().copied(),
+                            };
+                            self.xml_tokens.push(token);
+                        } else if let Some(raw_token) = self.raw_tokens.get(raw_token_index + 1) {
+                            let position = raw_token.position;
+                            match raw_token.kind {
+                                Text(start_index, end_index) => {
+                                    let token = XmlToken {
+                                        kind: OpenElement(
+                                            std::str::from_utf8(
+                                                &self.stream[start_index..end_index],
+                                            )
+                                            .unwrap()
+                                            .to_owned(),
+                                            self.xml_tokens.len(),
                                         ),
-                                    });
-                                    raw_token_index -= 2;
+                                        position,
+                                        parent: open_element_index_stack.front().copied(),
+                                    };
+                                    self.xml_tokens.push(token);
+                                    open_element_index_stack.push_front(self.xml_tokens.len() - 1);
+                                    raw_token_index += 1;
+                                }
+                                KeyChar(kc) => match self.stream[kc] as char {
+                                    '/' => {
+                                        if let Some(raw_token) =
+                                            self.raw_tokens.get(raw_token_index + 2)
+                                        {
+                                            if let Text(start_index, end_index) = raw_token.kind {
+                                                if open_element_index_stack.is_empty() {
+                                                    self.errors.push(XmlError {
+                                                                position,
+                                                                message: XmlParser::formatted_error(
+                                                                    position,
+                                                                    "Mismatch between closing and opening elements",
+                                                                ),
+                                                            });
+                                                }
+                                                if let Some(front) =
+                                                    open_element_index_stack.pop_front()
+                                                {
+                                                    if let OpenElement(o, i) =
+                                                        &self.xml_tokens[front].kind
+                                                    {
+                                                        let text = std::str::from_utf8(
+                                                            &self.stream[start_index..end_index],
+                                                        )
+                                                        .unwrap();
+                                                        if *i != front || o != text {
+                                                            self.errors.push(XmlError {
+                                                                        position,
+                                                                        message: XmlParser::formatted_error(position, &format!("Mismatch between closing {} and opening {} elements",
+                                                                        text, o)),
+                                                                    });
+                                                        }
+                                                    }
+                                                }
+                                                let token = XmlToken {
+                                                    kind: CloseElement(
+                                                        std::str::from_utf8(
+                                                            &self.stream[start_index..end_index],
+                                                        )
+                                                        .unwrap()
+                                                        .to_owned(),
+                                                    ),
+                                                    position,
+                                                    parent: open_element_index_stack
+                                                        .front()
+                                                        .copied(),
+                                                };
+                                                self.xml_tokens.push(token);
+                                                raw_token_index += 2;
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                    '/' => {
+                        if self.match_next_char(raw_token_index, '>') {
+                            if let Some(front) = open_element_index_stack.pop_front() {
+                                if let OpenElement(parent_name, _) = &self.xml_tokens[front].kind {
+                                    let position = self.raw_tokens[raw_token_index].position;
+                                    let token = XmlToken {
+                                        kind: CloseElement(parent_name.clone()),
+                                        position,
+                                        parent: open_element_index_stack.front().copied(),
+                                    };
+                                    self.xml_tokens.push(token);
                                 }
                             }
-                            raw_token_index += 1;
+                        }
+                    }
+                    '>' => {
+                        let position = self.raw_tokens[raw_token_index].position;
+                        raw_token_index += 1;
+                        let mut inner_text: SmallString<[u8; 16]> = SmallString::new();
+                        while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
+                            match raw_token.kind {
+                                Text(start_index, end_index)
+                                | Whitespace(start_index, end_index) => {
+                                    inner_text.push_str(
+                                        std::str::from_utf8(&self.stream[start_index..end_index])
+                                            .unwrap(),
+                                    );
+                                    raw_token_index += 1;
+                                }
+                                KeyChar(kc) => match self.stream[kc] as char {
+                                    '<' => {
+                                        raw_token_index -= 1;
+                                        break;
+                                    }
+                                    kc => {
+                                        inner_text.push(kc);
+                                        raw_token_index += 1;
+                                    }
+                                },
+                            }
                         }
                         let token = XmlToken {
-                            kind: Comment(comment.into_string()),
+                            kind: InnerText(inner_text.into_string()),
                             position,
                             parent: open_element_index_stack.front().copied(),
                         };
                         self.xml_tokens.push(token);
-                    } else if let Some(raw_token) = self.raw_tokens.get(raw_token_index + 1) {
-                        let position = raw_token.position;
-                        match &raw_token.kind {
-                            Text(text) => {
-                                let token = XmlToken {
-                                    kind: OpenElement(text.to_owned(), self.xml_tokens.len()),
-                                    position,
-                                    parent: open_element_index_stack.front().copied(),
-                                };
-                                self.xml_tokens.push(token);
-                                open_element_index_stack.push_front(self.xml_tokens.len() - 1);
-                                raw_token_index += 1;
-                            }
-                            KeyChar('/') => {
-                                if let Some(raw_token) = self.raw_tokens.get(raw_token_index + 2) {
-                                    if let Text(text) = &raw_token.kind {
-                                        if open_element_index_stack.is_empty() {
-                                            self.errors.push(XmlError {
-                                                position,
-                                                message: XmlParser::formatted_error(
-                                                    position,
-                                                    "Mismatch between closing and opening elements",
-                                                ),
-                                            });
-                                        }
-                                        if let Some(front) = open_element_index_stack.pop_front() {
-                                            if let OpenElement(o, i) = &self.xml_tokens[front].kind
-                                            {
-                                                if *i != front || o != text {
-                                                    self.errors.push(XmlError {
-                                                        position,
-                                                        message: XmlParser::formatted_error(position, &format!("Mismatch between closing {} and opening {} elements",
-                                                        text, o)),
-                                                    });
-                                                }
-                                            }
-                                        }
-                                        let token = XmlToken {
-                                            kind: CloseElement(text.to_owned()),
-                                            position,
-                                            parent: open_element_index_stack.front().copied(),
-                                        };
-                                        self.xml_tokens.push(token);
-                                        raw_token_index += 2;
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
                     }
-                }
-                KeyChar('/') => {
-                    if self.match_next_char(raw_token_index, '>') {
-                        if let Some(front) = open_element_index_stack.pop_front() {
-                            if let OpenElement(parent_name, _) = &self.xml_tokens[front].kind {
-                                let position = self.raw_tokens[raw_token_index].position;
-                                let token = XmlToken {
-                                    kind: CloseElement(parent_name.clone()),
-                                    position,
-                                    parent: open_element_index_stack.front().copied(),
-                                };
-                                self.xml_tokens.push(token);
-                            }
-                        }
-                    }
-                }
-                KeyChar('>') => {
-                    let position = self.raw_tokens[raw_token_index].position;
-                    raw_token_index += 1;
-                    let mut inner_text: SmallString<[u8; 16]> = SmallString::new();
-                    while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
-                        match &raw_token.kind {
-                            Text(text) | Whitespace(text) => {
-                                inner_text.push_str(text);
-                                raw_token_index += 1;
-                            }
-                            KeyChar('<') => {
-                                raw_token_index -= 1;
-                                break;
-                            }
-                            KeyChar(kc) => {
-                                inner_text.push(*kc);
-                                raw_token_index += 1;
-                            }
-                        }
-                    }
-                    let token = XmlToken {
-                        kind: InnerText(inner_text.into_string()),
-                        position,
-                        parent: open_element_index_stack.front().copied(),
-                    };
-                    self.xml_tokens.push(token);
-                }
+                    _ => {}
+                },
                 _ => {}
             }
             raw_token_index += 1;
@@ -782,12 +693,13 @@ mod tests {
         let mut parser = XmlParser::from_str(
             r#"
 <!-- Bob <!-- -->
-<bob>
-</bob>
+<bobby>
+</bobby>
         "#,
         )
         .unwrap();
         parser.parse();
+        dbg!(&parser.xml_tokens);
         assert_eq!(parser.errors.len(), 1);
     }
 
@@ -801,7 +713,6 @@ mod tests {
         )
         .unwrap();
         parser.parse();
-        dbg!(&parser.errors);
         assert_eq!(parser.errors.len(), 1);
     }
 
@@ -827,20 +738,16 @@ mod tests {
     fn large_file_len_check() {
         let mut parser = XmlParser::new("sample_files/large.xml");
         parser.parse();
+        assert_eq!(
+            parser
+                .xml_tokens
+                .iter()
+                .filter(|token| token.kind.is_open_element())
+                .count(),
+            81841
+        );
         assert_eq!(parser.xml_tokens.len(), 368284);
         assert_eq!(parser.raw_tokens.len(), 1118488);
         assert_eq!(parser.errors.len(), 0);
-    }
-
-    #[test]
-    fn large_file_first_attribute_check_lossy() {
-        let attribute_name = "towel";
-        let mut parser = XmlParser::new("sample_files/large.xml");
-        let attribute = parser.get_first_attribute_of_lossy(attribute_name, Some("Text"));
-        assert!(attribute.is_some());
-        match &attribute.unwrap().kind {
-            XmlKind::Attribute(name, _) => assert_eq!(name, attribute_name),
-            _ => panic!(),
-        }
     }
 }
