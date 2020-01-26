@@ -1,8 +1,10 @@
+use smallstr::SmallString;
 use std::char;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
+use std::str::FromStr;
 
 #[derive(Debug, PartialEq)]
 enum TokenKind {
@@ -18,6 +20,39 @@ pub enum XmlKind {
     InnerText(String),
     OpenElement(String, usize),
     CloseElement(String),
+}
+
+impl XmlKind {
+    pub fn is_comment(&self) -> bool {
+        match self {
+            XmlKind::Comment(..) => true,
+            _ => false,
+        }
+    }
+    pub fn is_attribute(&self) -> bool {
+        match self {
+            XmlKind::Attribute(..) => true,
+            _ => false,
+        }
+    }
+    pub fn is_inner_text(&self) -> bool {
+        match self {
+            XmlKind::InnerText(..) => true,
+            _ => false,
+        }
+    }
+    pub fn is_open_element(&self) -> bool {
+        match self {
+            XmlKind::OpenElement(..) => true,
+            _ => false,
+        }
+    }
+    pub fn is_close_element(&self) -> bool {
+        match self {
+            XmlKind::CloseElement(..) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -219,7 +254,7 @@ impl Iterator for XmlParser {
         if let Some(v) = lexer::next(self) {
             if !is_key_char(v) {
                 if v.is_whitespace() {
-                    let mut whitespace = String::new();
+                    let mut whitespace: SmallString<[u8; 16]> = SmallString::new();
                     whitespace.push(v);
                     while lexer::peek(self)?.is_whitespace() {
                         let character = lexer::next(self)?;
@@ -227,10 +262,10 @@ impl Iterator for XmlParser {
                     }
                     return Some(Token {
                         position: self.position,
-                        kind: TokenKind::Whitespace(whitespace),
+                        kind: TokenKind::Whitespace(whitespace.into_string()),
                     });
                 }
-                let mut text = String::new();
+                let mut text: SmallString<[u8; 16]> = SmallString::new();
                 text.push(v);
                 while let Some(peeked_character) = lexer::peek(self) {
                     if !is_key_char(peeked_character) && !peeked_character.is_whitespace() {
@@ -242,7 +277,7 @@ impl Iterator for XmlParser {
                 }
                 Some(Token {
                     position: self.position,
-                    kind: TokenKind::Text(text),
+                    kind: TokenKind::Text(text.into_string()),
                 })
             } else {
                 Some(Token {
@@ -253,6 +288,20 @@ impl Iterator for XmlParser {
         } else {
             None
         }
+    }
+}
+
+impl FromStr for XmlParser {
+    type Err = std::string::ParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let input = s.to_owned();
+        Ok(XmlParser {
+            position: FilePosition::new(),
+            stream: input.into_bytes().into_iter().peekable(),
+            raw_tokens: Vec::new(),
+            xml_tokens: Vec::new(),
+            errors: Vec::new(),
+        })
     }
 }
 
@@ -359,7 +408,7 @@ impl XmlParser {
                         }
                     }
                     if let KeyChar(boundary_character) = self.raw_tokens[raw_token_index].kind {
-                        let mut attribute_value = String::new();
+                        let mut attribute_value: SmallString<[u8; 16]> = SmallString::new();
                         loop {
                             raw_token_index += 1;
                             match &self.raw_tokens[raw_token_index].kind {
@@ -384,7 +433,7 @@ impl XmlParser {
                                             return Some(XmlToken {
                                                 kind: Attribute(
                                                     attribute_name.to_owned(),
-                                                    attribute_value,
+                                                    attribute_value.into_string(),
                                                 ),
                                                 position,
                                                 parent: Some(parent_id),
@@ -401,8 +450,13 @@ impl XmlParser {
                         raw_token_index += 4;
                         while self.raw_tokens.get(raw_token_index + 1).is_some() {
                             if self.match_next_str(raw_token_index, "-->") {
-                                raw_token_index += 3;
-                                break;
+                                raw_token_index += 2;
+                                if self.match_next_char(raw_token_index, '>') {
+                                    raw_token_index += 1;
+                                    break;
+                                } else {
+                                    raw_token_index -= 2;
+                                }
                             }
                             raw_token_index += 1;
                         }
@@ -457,6 +511,7 @@ impl XmlParser {
         None
     }
 
+    // TODO: I should turn xml tokens into a iterator, then I can call cool iterator methods in it, filter out all attributes and such.
     pub fn parse(&mut self) {
         use TokenKind::*;
         use XmlKind::*;
@@ -534,7 +589,7 @@ impl XmlParser {
                         }
                     }
                     if let KeyChar(boundary_character) = self.raw_tokens[raw_token_index].kind {
-                        let mut attribute_value = String::new();
+                        let mut attribute_value: SmallString<[u8; 16]> = SmallString::new();
                         loop {
                             raw_token_index += 1;
                             match &self.raw_tokens[raw_token_index].kind {
@@ -550,7 +605,10 @@ impl XmlParser {
                             }
                         }
                         let token = XmlToken {
-                            kind: Attribute(attribute_name.to_owned(), attribute_value.to_owned()),
+                            kind: Attribute(
+                                attribute_name.to_owned(),
+                                attribute_value.into_string(),
+                            ),
                             position,
                             parent: open_element_index_stack.front().copied(),
                         };
@@ -561,7 +619,7 @@ impl XmlParser {
                     if self.match_next_str(raw_token_index, "!--") {
                         raw_token_index += 4;
                         let position = self.raw_tokens[raw_token_index].position;
-                        let mut comment = String::new();
+                        let mut comment: SmallString<[u8; 16]> = SmallString::new();
                         while self.raw_tokens.get(raw_token_index + 1).is_some() {
                             let raw_token = &self.raw_tokens.get(raw_token_index).unwrap();
                             match &raw_token.kind {
@@ -573,13 +631,25 @@ impl XmlParser {
                                 }
                             }
                             if self.match_next_str(raw_token_index, "-->") {
-                                raw_token_index += 3;
-                                break;
+                                raw_token_index += 2;
+                                if self.match_next_char(raw_token_index, '>') {
+                                    raw_token_index += 1;
+                                    break;
+                                } else {
+                                    self.errors.push(XmlError {
+                                        position,
+                                        message: XmlParser::formatted_error(
+                                            position,
+                                            "-- is not permitted within comments",
+                                        ),
+                                    });
+                                    raw_token_index -= 2;
+                                }
                             }
                             raw_token_index += 1;
                         }
                         let token = XmlToken {
-                            kind: Comment(comment),
+                            kind: Comment(comment.into_string()),
                             position,
                             parent: open_element_index_stack.front().copied(),
                         };
@@ -653,7 +723,7 @@ impl XmlParser {
                 KeyChar('>') => {
                     let position = self.raw_tokens[raw_token_index].position;
                     raw_token_index += 1;
-                    let mut inner_text = String::new();
+                    let mut inner_text: SmallString<[u8; 16]> = SmallString::new();
                     while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
                         match &raw_token.kind {
                             Text(text) | Whitespace(text) => {
@@ -671,7 +741,7 @@ impl XmlParser {
                         }
                     }
                     let token = XmlToken {
-                        kind: InnerText(inner_text),
+                        kind: InnerText(inner_text.into_string()),
                         position,
                         parent: open_element_index_stack.front().copied(),
                     };
@@ -708,6 +778,34 @@ mod tests {
     }
 
     #[test]
+    fn nested_comment_check() {
+        let mut parser = XmlParser::from_str(
+            r#"
+<!-- Bob <!-- -->
+<bob>
+</bob>
+        "#,
+        )
+        .unwrap();
+        parser.parse();
+        assert_eq!(parser.errors.len(), 1);
+    }
+
+    #[test]
+    fn missing_closing_bracket_check() {
+        let mut parser = XmlParser::from_str(
+            r#"
+<bob>
+</bob
+        "#,
+        )
+        .unwrap();
+        parser.parse();
+        dbg!(&parser.errors);
+        assert_eq!(parser.errors.len(), 1);
+    }
+
+    #[test]
     fn small_file_attributes_len_check() {
         let mut attributes_len = 0;
         let mut parser = XmlParser::new("sample_files/small.xml");
@@ -735,7 +833,7 @@ mod tests {
     }
 
     #[test]
-    fn large_file_first_attribute_check() {
+    fn large_file_first_attribute_check_lossy() {
         let attribute_name = "towel";
         let mut parser = XmlParser::new("sample_files/large.xml");
         let attribute = parser.get_first_attribute_of_lossy(attribute_name, Some("Text"));
