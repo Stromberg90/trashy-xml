@@ -296,7 +296,6 @@ impl FromStr for XmlParser {
     type Err = std::string::ParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let input = s.to_owned();
-        dbg!(&input);
         Ok(XmlParser {
             index: 0,
             started_parsing: false,
@@ -388,6 +387,8 @@ impl XmlParser {
                             KeyChar(kc) => {
                                 if self.stream[kc] as char == '=' {
                                     break;
+                                } else {
+                                    raw_token_index += 1;
                                 }
                             }
                             Whitespace(_, _) => {
@@ -426,6 +427,8 @@ impl XmlParser {
                                 if self.stream[kc] as char == '"' || self.stream[kc] as char == '\''
                                 {
                                     break;
+                                } else {
+                                    raw_token_index += 1;
                                 }
                             }
                             Whitespace(_, _) => {
@@ -444,41 +447,47 @@ impl XmlParser {
                             }
                         }
                     }
-                    if let KeyChar(attribute_value_start) = self.raw_tokens[raw_token_index].kind {
-                        let boundary_character = self.stream[attribute_value_start] as char;
-                        let attribute_value_start = attribute_value_start + 1;
-                        let mut attribute_value_end = attribute_value_start;
-                        loop {
-                            raw_token_index += 1;
-                            match self.raw_tokens[raw_token_index].kind {
-                                KeyChar(key_char) => {
-                                    let key_char = self.stream[key_char] as char;
-                                    if key_char == boundary_character {
-                                        break;
+                    if let Some(token) = self.raw_tokens.get(raw_token_index) {
+                        if let KeyChar(attribute_value_start) = token.kind {
+                            let boundary_character = self.stream[attribute_value_start] as char;
+                            let attribute_value_start = attribute_value_start + 1;
+                            let mut attribute_value_end = attribute_value_start;
+                            loop {
+                                raw_token_index += 1;
+                                if let Some(token) = self.raw_tokens.get(raw_token_index) {
+                                    match token.kind {
+                                        KeyChar(key_char) => {
+                                            let key_char = self.stream[key_char] as char;
+                                            if key_char == boundary_character {
+                                                break;
+                                            }
+                                            attribute_value_end += 1;
+                                        }
+                                        Text(start_index, end_index)
+                                        | Whitespace(start_index, end_index) => {
+                                            attribute_value_end += end_index - start_index;
+                                        }
                                     }
-                                    attribute_value_end += 1;
-                                }
-                                Text(start_index, end_index)
-                                | Whitespace(start_index, end_index) => {
-                                    attribute_value_end += end_index - start_index;
+                                } else {
+                                    break;
                                 }
                             }
-                        }
-                        let token = XmlToken {
-                            kind: Attribute(
-                                std::str::from_utf8(&self.stream[start_index..end_index])
+                            let token = XmlToken {
+                                kind: Attribute(
+                                    std::str::from_utf8(&self.stream[start_index..end_index])
+                                        .ok()?
+                                        .to_owned(),
+                                    std::str::from_utf8(
+                                        &self.stream[attribute_value_start..attribute_value_end],
+                                    )
                                     .ok()?
                                     .to_owned(),
-                                std::str::from_utf8(
-                                    &self.stream[attribute_value_start..attribute_value_end],
-                                )
-                                .ok()?
-                                .to_owned(),
-                            ),
-                            position,
-                            parent: open_element_index_stack.front().copied(),
-                        };
-                        self.xml_tokens.push(token);
+                                ),
+                                position,
+                                parent: open_element_index_stack.front().copied(),
+                            };
+                            self.xml_tokens.push(token);
+                        }
                     }
                 }
                 KeyChar(kc) => match self.stream[kc] as char {
@@ -796,6 +805,30 @@ mod tests {
         assert!(parser.parse().is_some());
     }
     #[test]
+    fn fixed_index_out_of_bounds_crash_01() {
+        let mut parser = XmlParser::from_str(r#"<A=🌀=a"#).unwrap();
+        assert!(parser.parse().is_some());
+    }
+
+    #[test]
+    fn fixed_index_out_of_bounds_crash_02() {
+        let mut parser = XmlParser::from_str(r#"<Ⱥ\'`=<Ô"#).unwrap();
+        assert!(parser.parse().is_some());
+    }
+
+    #[test]
+    fn fixed_index_out_of_bounds_crash_03() {
+        let mut parser = XmlParser::from_str(r#"<\u{fe00} #=\"0"#).unwrap();
+        assert!(parser.parse().is_some());
+    }
+
+    #[test]
+    fn empty_string() {
+        let mut parser = XmlParser::from_str("").unwrap();
+        assert!(parser.parse().is_some());
+    }
+
+    #[test]
     fn large_file_len_check() {
         let mut parser = XmlParser::new("sample_files/large.xml").unwrap();
         parser.parse();
@@ -817,7 +850,14 @@ use proptest::prelude::*;
 
 proptest! {
     #[test]
-    fn doesnt_crash(s in "\\PC*") {
+    fn doesnt_crash_01(s in "<\\PC* \\PC*=\"\\PC*\">\n</\\PC*>") {
+        let mut parser = XmlParser::from_str(&s)
+        .unwrap();
+        parser.parse();
+    }
+
+    #[test]
+    fn doesnt_crash_02(s in "\\PC*") {
         let mut parser = XmlParser::from_str(&s)
         .unwrap();
         parser.parse();
