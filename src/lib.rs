@@ -296,6 +296,7 @@ impl FromStr for XmlParser {
     type Err = std::string::ParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let input = s.to_owned();
+        dbg!(&input);
         Ok(XmlParser {
             index: 0,
             started_parsing: false,
@@ -783,7 +784,17 @@ mod tests {
         assert_eq!(attributes_len, 3);
         assert_eq!(parser.errors.len(), 0);
     }
-
+    #[test]
+    fn no_hang_01() {
+        let mut parser = XmlParser::from_str(r#"`\"⽣ቋ<¥Ⱥ$+𛲜䒓ჇN&=១వ**À \"¥𐊣{¥ ""#).unwrap();
+        assert!(parser.parse().is_some());
+    }
+    #[test]
+    fn no_hang_02() {
+        let mut parser =
+            XmlParser::from_str(r#"?$i૧<ᮙ8\'\\9×g🩺ౚ᭖῁𝈄𒂳🕴*ᣍኾ?$fY    \\𑴃 \"%¥Z""#).unwrap();
+        assert!(parser.parse().is_some());
+    }
     #[test]
     fn large_file_len_check() {
         let mut parser = XmlParser::new("sample_files/large.xml").unwrap();
@@ -799,5 +810,16 @@ mod tests {
         assert_eq!(parser.xml_tokens.len(), 368284);
         assert_eq!(parser.raw_tokens.len(), 1118488);
         assert_eq!(parser.errors.len(), 0);
+    }
+}
+
+use proptest::prelude::*;
+
+proptest! {
+    #[test]
+    fn doesnt_crash(s in "\\PC*") {
+        let mut parser = XmlParser::from_str(&s)
+        .unwrap();
+        parser.parse();
     }
 }

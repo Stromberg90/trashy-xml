@@ -13,6 +13,9 @@ keywords = ["xml", "parser"]
 categories = ["parsing", "text-processing"]
 license = "MIT"
 
+[dependencies]
+proptest = "0.9.5"
+
 [dev-dependencies]
 criterion = "0.3"
 
