@@ -90,7 +90,7 @@ pub struct XmlError {
 /// ```
 /// use trashy_xml::{XmlKind, XmlMethods, XmlParser};
 ///
-/// let mut parser = XmlParser::new("sample_files/small.xml");
+/// let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
 /// parser.parse();
 /// for token in &parser.xml_tokens {
 ///     if let XmlKind::OpenElement(name, _) = &token.kind {
@@ -120,7 +120,7 @@ pub trait XmlMethods {
     /// ```
     /// use trashy_xml::{XmlKind, XmlMethods, XmlParser};
     ///
-    /// let mut parser = XmlParser::new("sample_files/small.xml");
+    /// let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
     /// parser.parse();
     /// for token in &parser.xml_tokens {
     ///    for child_index in parser.xml_tokens.get_children(token) {
@@ -135,7 +135,7 @@ pub trait XmlMethods {
     /// ```
     /// use trashy_xml::{XmlKind, XmlMethods, XmlParser};
     ///
-    /// let mut parser = XmlParser::new("sample_files/small.xml");
+    /// let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
     /// parser.parse();
     /// for token in &parser.xml_tokens {
     ///    for child_index in parser.xml_tokens.get_attributes(token) {
@@ -150,7 +150,7 @@ pub trait XmlMethods {
     /// ```
     /// use trashy_xml::{XmlKind, XmlMethods, XmlParser};
     ///
-    /// let mut parser = XmlParser::new("sample_files/small.xml");
+    /// let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
     /// parser.parse();
     /// for token in &parser.xml_tokens {
     ///    for child_index in parser.xml_tokens.get_siblings(token) {
@@ -271,7 +271,7 @@ impl Iterator for XmlParser {
                 let start_index = self.index;
                 while let Some(peeked_character) = lexer::peek(self) {
                     if !is_key_char(peeked_character) && !peeked_character.is_whitespace() {
-                        lexer::next(self).unwrap();
+                        lexer::next(self)?;
                     } else {
                         break;
                     }
@@ -310,13 +310,10 @@ impl FromStr for XmlParser {
 
 impl XmlParser {
     /// Constructs a new `XmlParser`.
-    pub fn new<P: AsRef<Path>>(filepath: P) -> XmlParser {
+    pub fn new<P: AsRef<Path>>(filepath: P) -> Option<XmlParser> {
         let mut buffer = Vec::new();
-        File::open(filepath)
-            .unwrap()
-            .read_to_end(&mut buffer)
-            .unwrap();
-        XmlParser {
+        File::open(filepath).ok()?.read_to_end(&mut buffer).ok()?;
+        Some(XmlParser {
             index: 0,
             started_parsing: false,
             position: FilePosition::new(),
@@ -324,7 +321,7 @@ impl XmlParser {
             raw_tokens: Vec::new(),
             xml_tokens: Vec::new(),
             errors: Vec::new(),
-        }
+        })
     }
 
     fn formatted_error(position: FilePosition, message: &str) -> String {
@@ -362,12 +359,10 @@ impl XmlParser {
         false
     }
 
-    // TODO: I should turn xml tokens into a iterator, then I can call cool iterator methods in it, filter out all attributes and such.
-    pub fn parse(&mut self) {
+    pub fn parse(&mut self) -> Option<&Self> {
         use TokenKind::*;
         use XmlKind::*;
 
-        // Have raw tokens as a local variable instead of a struct field, I don't need to keep it around right?
         self.raw_tokens = self.collect();
 
         let mut open_element_index_stack = VecDeque::<usize>::new();
@@ -407,7 +402,7 @@ impl XmlParser {
                                             std::str::from_utf8(
                                                 &self.stream[start_index..end_index]
                                             )
-                                            .unwrap()
+                                            .ok()?
                                         ),
                                     ),
                                 });
@@ -471,12 +466,12 @@ impl XmlParser {
                         let token = XmlToken {
                             kind: Attribute(
                                 std::str::from_utf8(&self.stream[start_index..end_index])
-                                    .unwrap()
+                                    .ok()?
                                     .to_owned(),
                                 std::str::from_utf8(
                                     &self.stream[attribute_value_start..attribute_value_end],
                                 )
-                                .unwrap()
+                                .ok()?
                                 .to_owned(),
                             ),
                             position,
@@ -493,7 +488,7 @@ impl XmlParser {
                             let comment_start = kc + 4;
                             let mut comment_end = comment_start;
                             while self.raw_tokens.get(raw_token_index + 1).is_some() {
-                                let raw_token = &self.raw_tokens.get(raw_token_index).unwrap();
+                                let raw_token = &self.raw_tokens.get(raw_token_index)?;
                                 match raw_token.kind {
                                     KeyChar(_) => {
                                         comment_end += 1;
@@ -524,7 +519,7 @@ impl XmlParser {
                             let token = XmlToken {
                                 kind: Comment(
                                     std::str::from_utf8(&self.stream[comment_start..comment_end])
-                                        .unwrap()
+                                        .ok()?
                                         .to_owned(),
                                 ),
                                 position,
@@ -540,7 +535,7 @@ impl XmlParser {
                                             std::str::from_utf8(
                                                 &self.stream[start_index..end_index],
                                             )
-                                            .unwrap()
+                                            .ok()?
                                             .to_owned(),
                                             self.xml_tokens.len(),
                                         ),
@@ -556,6 +551,7 @@ impl XmlParser {
                                         if let Some(raw_token) =
                                             self.raw_tokens.get(raw_token_index + 2)
                                         {
+                                            raw_token_index += 2;
                                             if let Text(start_index, end_index) = raw_token.kind {
                                                 if open_element_index_stack.is_empty() {
                                                     self.errors.push(XmlError {
@@ -575,7 +571,7 @@ impl XmlParser {
                                                         let text = std::str::from_utf8(
                                                             &self.stream[start_index..end_index],
                                                         )
-                                                        .unwrap();
+                                                        .ok()?;
                                                         if *i != front || o != text {
                                                             self.errors.push(XmlError {
                                                                         position,
@@ -590,7 +586,7 @@ impl XmlParser {
                                                         std::str::from_utf8(
                                                             &self.stream[start_index..end_index],
                                                         )
-                                                        .unwrap()
+                                                        .ok()?
                                                         .to_owned(),
                                                     ),
                                                     position,
@@ -599,7 +595,45 @@ impl XmlParser {
                                                         .copied(),
                                                 };
                                                 self.xml_tokens.push(token);
-                                                raw_token_index += 2;
+                                                if (raw_token_index + 1) >= self.raw_tokens.len() {
+                                                    self.errors.push(XmlError {
+                                                        position,
+                                                        message: XmlParser::formatted_error(
+                                                            position,
+                                                            &format!("Expected '>'"),
+                                                        ),
+                                                    });
+                                                    break;
+                                                }
+                                                while let Whitespace(_, _) =
+                                                    self.raw_tokens[raw_token_index + 1].kind
+                                                {
+                                                    raw_token_index += 1;
+                                                }
+                                                match self.raw_tokens[raw_token_index + 1].kind {
+                                                    KeyChar(index) => {
+                                                        if self.stream[index] as char != '>' {
+                                                            self.errors.push(XmlError {
+                                                                position,
+                                                                message: XmlParser::formatted_error(
+                                                                    position,
+                                                                    &format!("Expected '>'"),
+                                                                ),
+                                                            });
+                                                            raw_token_index += 1;
+                                                        }
+                                                    }
+                                                    _ => {
+                                                        self.errors.push(XmlError {
+                                                            position,
+                                                            message: XmlParser::formatted_error(
+                                                                position,
+                                                                &format!("Expected '>'"),
+                                                            ),
+                                                        });
+                                                        raw_token_index += 1;
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -650,7 +684,7 @@ impl XmlParser {
                         let token = XmlToken {
                             kind: InnerText(
                                 std::str::from_utf8(&self.stream[text_start..text_end])
-                                    .unwrap()
+                                    .ok()?
                                     .to_owned(),
                             ),
                             position,
@@ -674,6 +708,7 @@ impl XmlParser {
                 ),
             });
         }
+        Some(self)
     }
 }
 
@@ -683,7 +718,7 @@ mod tests {
 
     #[test]
     fn small_file_len_check() {
-        let mut parser = XmlParser::new("sample_files/small.xml");
+        let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
         parser.parse();
         assert_eq!(parser.xml_tokens.len(), 38);
         assert_eq!(parser.raw_tokens.len(), 196);
@@ -705,7 +740,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_closing_bracket_check() {
+    fn missing_closing_bracket_end_check() {
         let mut parser = XmlParser::from_str(
             r#"
 <bob>
@@ -718,9 +753,23 @@ mod tests {
     }
 
     #[test]
+    fn missing_closing_bracket_check() {
+        let mut parser = XmlParser::from_str(
+            r#"
+<bob>
+            <fud>
+            </fud o>
+</bob>
+        "#,
+        )
+        .unwrap();
+        parser.parse();
+        assert_eq!(parser.errors.len(), 1);
+    }
+    #[test]
     fn small_file_attributes_len_check() {
         let mut attributes_len = 0;
-        let mut parser = XmlParser::new("sample_files/small.xml");
+        let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
         parser.parse();
         for token in &parser.xml_tokens {
             if let XmlKind::OpenElement(name, _) = &token.kind {
@@ -737,7 +786,7 @@ mod tests {
 
     #[test]
     fn large_file_len_check() {
-        let mut parser = XmlParser::new("sample_files/large.xml");
+        let mut parser = XmlParser::new("sample_files/large.xml").unwrap();
         parser.parse();
         assert_eq!(
             parser

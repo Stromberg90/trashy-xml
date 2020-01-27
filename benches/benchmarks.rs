@@ -3,7 +3,7 @@ use trashy_xml::{XmlKind, XmlMethods, XmlParser};
 
 fn small_file_attributes() -> usize {
     let mut result = 0;
-    let mut parser = XmlParser::new("sample_files/small.xml");
+    let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
     parser.parse();
     for token in &parser.xml_tokens {
         if let XmlKind::OpenElement(name, _) = &token.kind {
@@ -18,7 +18,7 @@ fn small_file_attributes() -> usize {
 }
 
 fn large_file_token_length() -> usize {
-    let mut parser = XmlParser::new("sample_files/large.xml");
+    let mut parser = XmlParser::new("sample_files/large.xml").unwrap();
     parser.parse();
     return parser.xml_tokens.len();
 }
