@@ -1,6 +1,6 @@
 [package]
 name = "trashy-xml"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Andreas Strømberg<andreas.stromberg90@gmail.com>"]
 description = "Less than stellar xml parser, but does what I need in a \"simple\" way"
 edition = "2018"
@@ -13,10 +13,8 @@ keywords = ["xml", "parser"]
 categories = ["parsing", "text-processing"]
 license = "MIT"
 
-[dependencies]
-proptest = "0.9.5"
-
 [dev-dependencies]
+proptest = "0.9.5"
 criterion = "0.3"
 
 [[bench]]

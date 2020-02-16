@@ -95,8 +95,8 @@ pub struct XmlError {
 /// for token in &parser.xml_tokens {
 ///     if let XmlKind::OpenElement(name, _) = &token.kind {
 ///         if name == "element" {
-///             for i in parser.xml_tokens.get_attributes(token) {
-///                 dbg!(&parser.xml_tokens[i]);
+///             for attribute in parser.xml_tokens.get_attributes(token) {
+///                 dbg!(&attribute);
 ///             }
 ///         }
 ///     }
@@ -123,12 +123,12 @@ pub trait XmlMethods {
     /// let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
     /// parser.parse();
     /// for token in &parser.xml_tokens {
-    ///    for child_index in parser.xml_tokens.get_children(token) {
-    ///        dbg!(&parser.xml_tokens[child_index]);
+    ///    for child in parser.xml_tokens.get_children(token) {
+    ///        dbg!(&child);
     ///    }
     /// }
     /// ```
-    fn get_children(&self, token: &XmlToken) -> Vec<usize>;
+    fn get_children(&self, token: &XmlToken) -> Vec<&XmlToken>;
 
     /// Gets all attributes indecies of this token
     ///
@@ -138,12 +138,12 @@ pub trait XmlMethods {
     /// let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
     /// parser.parse();
     /// for token in &parser.xml_tokens {
-    ///    for child_index in parser.xml_tokens.get_attributes(token) {
-    ///        dbg!(&parser.xml_tokens[child_index]);
+    ///    for attribute in parser.xml_tokens.get_attributes(token) {
+    ///        dbg!(&attribute);
     ///    }
     /// }
     /// ```
-    fn get_attributes(&self, token: &XmlToken) -> Vec<usize>;
+    fn get_attributes(&self, token: &XmlToken) -> Vec<&XmlToken>;
 
     /// Gets all siblings indecies of this token
     ///
@@ -153,22 +153,22 @@ pub trait XmlMethods {
     /// let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
     /// parser.parse();
     /// for token in &parser.xml_tokens {
-    ///    for child_index in parser.xml_tokens.get_siblings(token) {
-    ///        dbg!(&parser.xml_tokens[child_index]);
+    ///    for sibling in parser.xml_tokens.get_siblings(token) {
+    ///        dbg!(&sibling);
     ///    }
     /// }
     /// ```
-    fn get_siblings(&self, token: &XmlToken) -> Vec<usize>;
+    fn get_siblings(&self, token: &XmlToken) -> Vec<&XmlToken>;
 }
 
 impl XmlMethods for Vec<XmlToken> {
-    fn get_children(&self, token: &XmlToken) -> Vec<usize> {
-        let mut result = Vec::<usize>::new();
+    fn get_children(&self, token: &XmlToken) -> Vec<&XmlToken> {
+        let mut result = Vec::<&XmlToken>::new();
         if let XmlKind::OpenElement(_, i) = &token.kind {
-            for (current_index, tk) in self.iter().enumerate() {
-                if let Some(parent) = tk.parent {
+            for token in self.iter() {
+                if let Some(parent) = token.parent {
                     if parent == *i {
-                        result.push(current_index);
+                        result.push(token);
                     }
                 }
             }
@@ -176,14 +176,14 @@ impl XmlMethods for Vec<XmlToken> {
         result
     }
 
-    fn get_attributes(&self, token: &XmlToken) -> Vec<usize> {
-        let mut result = Vec::<usize>::new();
+    fn get_attributes(&self, token: &XmlToken) -> Vec<&XmlToken> {
+        let mut result = Vec::<&XmlToken>::new();
         if let XmlKind::OpenElement(_, i) = &token.kind {
-            for (current_index, tk) in self.iter().enumerate() {
-                if let Some(parent) = tk.parent {
-                    if let XmlKind::Attribute(_, _) = tk.kind {
+            for token in self.iter() {
+                if let Some(parent) = token.parent {
+                    if let XmlKind::Attribute(_, _) = token.kind {
                         if parent == *i {
-                            result.push(current_index);
+                            result.push(token);
                         }
                     }
                 }
@@ -192,13 +192,13 @@ impl XmlMethods for Vec<XmlToken> {
         result
     }
 
-    fn get_siblings(&self, token: &XmlToken) -> Vec<usize> {
-        let mut result = Vec::<usize>::new();
+    fn get_siblings(&self, token: &XmlToken) -> Vec<&XmlToken> {
+        let mut result = Vec::<&XmlToken>::new();
         if let Some(token_parent) = &token.parent {
-            for (current_index, tk) in self.iter().enumerate() {
-                if let Some(parent) = tk.parent {
+            for token in self.iter() {
+                if let Some(parent) = token.parent {
                     if parent == *token_parent {
-                        result.push(current_index);
+                        result.push(token);
                     }
                 }
             }
@@ -846,8 +846,10 @@ mod tests {
     }
 }
 
+#[cfg(test)]
 use proptest::prelude::*;
 
+#[cfg(test)]
 proptest! {
     #[test]
     fn doesnt_crash_01(s in "<\\PC* \\PC*=\"\\PC*\">\n</\\PC*>") {
