@@ -646,13 +646,66 @@ impl XmlParser {
                                                 }
                                             }
                                         }
+                                    } else if let '?' = self.stream[kc] as char {
+                                        raw_token_index += 1;
+                                        match self.raw_tokens[raw_token_index + 1].kind {
+                                            Text(start_index, end_index) => {
+                                                let text = std::str::from_utf8(
+                                                    &self.stream[start_index..end_index],
+                                                )
+                                                .ok()?;
+                                                if text == "xml" {
+                                                    let mut element_name = String::new();
+                                                    element_name.push('?');
+                                                    element_name.push_str(
+                                                        std::str::from_utf8(
+                                                            &self.stream[start_index..end_index],
+                                                        )
+                                                        .ok()?,
+                                                    );
+                                                    let token = XmlToken {
+                                                        kind: OpenElement(
+                                                            element_name.to_owned(),
+                                                            self.xml_tokens.len(),
+                                                        ),
+                                                        position,
+                                                        parent: open_element_index_stack
+                                                            .front()
+                                                            .copied(),
+                                                    };
+                                                    self.xml_tokens.push(token);
+                                                    open_element_index_stack
+                                                        .push_front(self.xml_tokens.len() - 1);
+                                                    raw_token_index += 1;
+                                                } else {
+                                                    self.errors.push(XmlError {
+                                                        position,
+                                                        message: XmlParser::formatted_error(
+                                                            position,
+                                                            &format!("Expected 'xml'"),
+                                                        ),
+                                                    });
+                                                    raw_token_index += 1;
+                                                }
+                                            }
+                                            _ => {
+                                                self.errors.push(XmlError {
+                                                    position,
+                                                    message: XmlParser::formatted_error(
+                                                        position,
+                                                        &format!("Expected 'xml'"),
+                                                    ),
+                                                });
+                                                raw_token_index += 1;
+                                            }
+                                        }
                                     }
                                 }
                                 _ => {}
                             }
                         }
                     }
-                    '/' => {
+                    '/' | '?' => {
                         if self.match_next_char(raw_token_index, '>') {
                             if let Some(front) = open_element_index_stack.pop_front() {
                                 if let OpenElement(parent_name, _) = &self.xml_tokens[front].kind {
@@ -763,12 +816,28 @@ mod tests {
     }
 
     #[test]
+    fn xml_declaration() {
+        let mut parser = XmlParser::from_str(
+            r#"
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<bob>
+</bob>
+            "#,
+        )
+        .unwrap();
+        parser.parse();
+        dbg!(&parser.errors);
+        dbg!(&parser.xml_tokens);
+        assert_eq!(parser.errors.len(), 0);
+    }
+
+    #[test]
     fn missing_closing_bracket_check() {
         let mut parser = XmlParser::from_str(
             r#"
 <bob>
-            <fud>
-            </fud o>
+    <fud>
+    </fud o>
 </bob>
         "#,
         )
