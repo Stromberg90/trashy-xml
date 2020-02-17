@@ -401,10 +401,9 @@ impl XmlParser {
                                         position,
                                         &format!(
                                             "Specification mandates value for attribute {}",
-                                            std::str::from_utf8(
+                                            String::from_utf8_lossy(
                                                 &self.stream[start_index..end_index]
                                             )
-                                            .ok()?
                                         ),
                                     ),
                                 });
@@ -474,14 +473,12 @@ impl XmlParser {
                             }
                             let token = XmlToken {
                                 kind: Attribute(
-                                    std::str::from_utf8(&self.stream[start_index..end_index])
-                                        .ok()?
-                                        .to_owned(),
-                                    std::str::from_utf8(
+                                    String::from_utf8_lossy(&self.stream[start_index..end_index])
+                                        .to_string(),
+                                    String::from_utf8_lossy(
                                         &self.stream[attribute_value_start..attribute_value_end],
                                     )
-                                    .ok()?
-                                    .to_owned(),
+                                    .to_string(),
                                 ),
                                 position,
                                 parent: open_element_index_stack.front().copied(),
@@ -528,9 +525,10 @@ impl XmlParser {
                             }
                             let token = XmlToken {
                                 kind: Comment(
-                                    std::str::from_utf8(&self.stream[comment_start..comment_end])
-                                        .ok()?
-                                        .to_owned(),
+                                    String::from_utf8_lossy(
+                                        &self.stream[comment_start..comment_end],
+                                    )
+                                    .to_string(),
                                 ),
                                 position,
                                 parent: open_element_index_stack.front().copied(),
@@ -542,11 +540,10 @@ impl XmlParser {
                                 Text(start_index, end_index) => {
                                     let token = XmlToken {
                                         kind: OpenElement(
-                                            std::str::from_utf8(
+                                            String::from_utf8_lossy(
                                                 &self.stream[start_index..end_index],
                                             )
-                                            .ok()?
-                                            .to_owned(),
+                                            .to_string(),
                                             self.xml_tokens.len(),
                                         ),
                                         position,
@@ -578,10 +575,9 @@ impl XmlParser {
                                                     if let OpenElement(o, i) =
                                                         &self.xml_tokens[front].kind
                                                     {
-                                                        let text = std::str::from_utf8(
+                                                        let text = &String::from_utf8_lossy(
                                                             &self.stream[start_index..end_index],
-                                                        )
-                                                        .ok()?;
+                                                        );
                                                         if *i != front || o != text {
                                                             self.errors.push(XmlError {
                                                                         position,
@@ -593,11 +589,10 @@ impl XmlParser {
                                                 }
                                                 let token = XmlToken {
                                                     kind: CloseElement(
-                                                        std::str::from_utf8(
+                                                        String::from_utf8_lossy(
                                                             &self.stream[start_index..end_index],
                                                         )
-                                                        .ok()?
-                                                        .to_owned(),
+                                                        .to_string(),
                                                     ),
                                                     position,
                                                     parent: open_element_index_stack
@@ -650,18 +645,17 @@ impl XmlParser {
                                         raw_token_index += 1;
                                         match self.raw_tokens[raw_token_index + 1].kind {
                                             Text(start_index, end_index) => {
-                                                let text = std::str::from_utf8(
+                                                let text = String::from_utf8_lossy(
                                                     &self.stream[start_index..end_index],
-                                                )
-                                                .ok()?;
+                                                );
                                                 if text == "xml" {
                                                     let mut element_name = String::new();
                                                     element_name.push('?');
                                                     element_name.push_str(
-                                                        std::str::from_utf8(
+                                                        String::from_utf8_lossy(
                                                             &self.stream[start_index..end_index],
                                                         )
-                                                        .ok()?,
+                                                        .as_ref(),
                                                     );
                                                     let token = XmlToken {
                                                         kind: OpenElement(
@@ -746,9 +740,8 @@ impl XmlParser {
                         }
                         let token = XmlToken {
                             kind: InnerText(
-                                std::str::from_utf8(&self.stream[text_start..text_end])
-                                    .ok()?
-                                    .to_owned(),
+                                String::from_utf8_lossy(&self.stream[text_start..text_end])
+                                    .to_string(),
                             ),
                             position,
                             parent: open_element_index_stack.front().copied(),
