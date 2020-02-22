@@ -106,6 +106,7 @@ pub struct XmlError {
 pub struct XmlParser {
     index: usize,
     started_parsing: bool,
+    ignore_comments: bool,
     position: FilePosition,
     stream: Vec<u8>,
     raw_tokens: Vec<Token>,
@@ -115,7 +116,7 @@ pub struct XmlParser {
 
 /// Helper methods
 pub trait XmlMethods {
-    /// Gets all children indecies of this token
+    /// Gets all children tokens
     ///
     /// ```
     /// use trashy_xml::{XmlKind, XmlMethods, XmlParser};
@@ -130,7 +131,7 @@ pub trait XmlMethods {
     /// ```
     fn get_children(&self, token: &XmlToken) -> Vec<&XmlToken>;
 
-    /// Gets all attributes indecies of this token
+    /// Gets all attributes tokens
     ///
     /// ```
     /// use trashy_xml::{XmlKind, XmlMethods, XmlParser};
@@ -145,7 +146,7 @@ pub trait XmlMethods {
     /// ```
     fn get_attributes(&self, token: &XmlToken) -> Vec<&XmlToken>;
 
-    /// Gets all siblings indecies of this token
+    /// Gets all siblings tokens
     ///
     /// ```
     /// use trashy_xml::{XmlKind, XmlMethods, XmlParser};
@@ -299,6 +300,7 @@ impl FromStr for XmlParser {
         Ok(XmlParser {
             index: 0,
             started_parsing: false,
+            ignore_comments: true,
             position: FilePosition::new(),
             stream: input.into_bytes(),
             raw_tokens: Vec::new(),
@@ -316,6 +318,7 @@ impl XmlParser {
         Some(XmlParser {
             index: 0,
             started_parsing: false,
+            ignore_comments: true,
             position: FilePosition::new(),
             stream: buffer,
             raw_tokens: Vec::new(),
@@ -324,12 +327,18 @@ impl XmlParser {
         })
     }
 
+    pub fn ignore_comments(&mut self, ignore_comments: bool) -> &mut XmlParser {
+        self.ignore_comments = ignore_comments;
+        self
+    }
+
     fn formatted_error(position: FilePosition, message: &str) -> String {
         format!(
             "Error({}, {}): {}.",
             position.line, position.column, message
         )
     }
+
     fn match_next_str(&self, index: usize, characters: &str) -> bool {
         if index + characters.chars().count() < self.raw_tokens.len() {
             for (token, character) in self.raw_tokens
@@ -350,6 +359,7 @@ impl XmlParser {
         }
         true
     }
+
     fn match_next_char(&self, index: usize, character: char) -> bool {
         if index + 1 < self.raw_tokens.len() {
             if let TokenKind::KeyChar(kc) = self.raw_tokens[index + 1].kind {
@@ -496,13 +506,15 @@ impl XmlParser {
                             let mut comment_end = comment_start;
                             while self.raw_tokens.get(raw_token_index + 1).is_some() {
                                 let raw_token = &self.raw_tokens.get(raw_token_index)?;
-                                match raw_token.kind {
-                                    KeyChar(_) => {
-                                        comment_end += 1;
-                                    }
-                                    Whitespace(start_index, end_index)
-                                    | Text(start_index, end_index) => {
-                                        comment_end += end_index - start_index;
+                                if !self.ignore_comments {
+                                    match raw_token.kind {
+                                        KeyChar(_) => {
+                                            comment_end += 1;
+                                        }
+                                        Whitespace(start_index, end_index)
+                                        | Text(start_index, end_index) => {
+                                            comment_end += end_index - start_index;
+                                        }
                                     }
                                 }
                                 if self.match_next_str(raw_token_index, "--") {
@@ -511,29 +523,33 @@ impl XmlParser {
                                         raw_token_index += 1;
                                         break;
                                     } else {
-                                        self.errors.push(XmlError {
-                                            position,
-                                            message: XmlParser::formatted_error(
+                                        if !self.ignore_comments {
+                                            self.errors.push(XmlError {
                                                 position,
-                                                "-- is not permitted within comments",
-                                            ),
-                                        });
+                                                message: XmlParser::formatted_error(
+                                                    position,
+                                                    "-- is not permitted within comments",
+                                                ),
+                                            });
+                                        }
                                         raw_token_index -= 2;
                                     }
                                 }
                                 raw_token_index += 1;
                             }
-                            let token = XmlToken {
-                                kind: Comment(
-                                    String::from_utf8_lossy(
-                                        &self.stream[comment_start..comment_end],
-                                    )
-                                    .to_string(),
-                                ),
-                                position,
-                                parent: open_element_index_stack.front().copied(),
-                            };
-                            self.xml_tokens.push(token);
+                            if !self.ignore_comments {
+                                let token = XmlToken {
+                                    kind: Comment(
+                                        String::from_utf8_lossy(
+                                            &self.stream[comment_start..comment_end],
+                                        )
+                                        .to_string(),
+                                    ),
+                                    position,
+                                    parent: open_element_index_stack.front().copied(),
+                                };
+                                self.xml_tokens.push(token);
+                            }
                         } else if let Some(raw_token) = self.raw_tokens.get(raw_token_index + 1) {
                             let position = raw_token.position;
                             match raw_token.kind {
@@ -775,6 +791,7 @@ mod tests {
     #[test]
     fn small_file_len_check() {
         let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
+        parser.ignore_comments(false);
         parser.parse();
         assert_eq!(parser.xml_tokens.len(), 38);
         assert_eq!(parser.raw_tokens.len(), 196);
@@ -809,13 +826,29 @@ mod tests {
     }
 
     #[test]
-    fn xml_declaration() {
+    fn xml_declaration_01() {
         let mut parser = XmlParser::from_str(
             r#"
 <?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <bob>
 </bob>
             "#,
+        )
+        .unwrap();
+        parser.parse();
+        dbg!(&parser.errors);
+        dbg!(&parser.xml_tokens);
+        assert_eq!(parser.errors.len(), 0);
+    }
+
+    #[test]
+    fn xml_declaration_02() {
+        let mut parser = XmlParser::from_str(
+            r#"
+<?xml version="1.0"?>
+<unit type="being" slot="21">
+</unit>
+"#,
         )
         .unwrap();
         parser.parse();
@@ -881,6 +914,12 @@ mod tests {
     #[test]
     fn fixed_index_out_of_bounds_crash_03() {
         let mut parser = XmlParser::from_str(r#"<\u{fe00} #=\"0"#).unwrap();
+        assert!(parser.parse().is_some());
+    }
+
+    #[test]
+    fn fixed_index_out_of_bounds_crash_04() {
+        let mut parser = XmlParser::from_str(r#"<?"#).unwrap();
         assert!(parser.parse().is_some());
     }
 
