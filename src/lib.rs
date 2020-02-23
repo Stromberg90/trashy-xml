@@ -374,6 +374,7 @@ impl XmlParser {
         use XmlKind::*;
 
         self.raw_tokens = self.collect();
+        self.xml_tokens = Vec::with_capacity(self.raw_tokens.len() / 3);
 
         let mut open_element_index_stack = VecDeque::<usize>::new();
         let mut raw_token_index = 0;
@@ -808,6 +809,7 @@ mod tests {
         "#,
         )
         .unwrap();
+        parser.ignore_comments(true);
         parser.parse();
         assert_eq!(parser.errors.len(), 1);
     }
