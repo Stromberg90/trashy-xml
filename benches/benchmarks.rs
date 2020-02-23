@@ -2,6 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use trashy_xml::{XmlKind, XmlMethods, XmlParser};
 
 fn small_file_attributes() -> usize {
+    // quick-xml was at 30us
     let mut result = 0;
     let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
     parser.parse();
@@ -18,6 +19,7 @@ fn small_file_attributes() -> usize {
 }
 
 fn large_file_token_length() -> usize {
+    // quick-xml was at 9ms
     let mut parser = XmlParser::new("sample_files/large.xml").unwrap();
     parser.parse();
     return parser.xml_tokens.len();
