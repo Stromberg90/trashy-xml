@@ -104,6 +104,7 @@ pub struct XmlError {
 /// ```
 #[derive(Debug)]
 pub struct XmlParser {
+    tab_width: usize,
     index: usize,
     started_parsing: bool,
     ignore_comments: bool,
@@ -240,6 +241,9 @@ mod lexer {
                         }
                     }
                 }
+                b'\t' => {
+                    xml_parser.position.column += xml_parser.tab_width;
+                }
                 b'\n' => {
                     xml_parser.position.line += 1;
                     xml_parser.position.column = 1;
@@ -299,6 +303,7 @@ impl FromStr for XmlParser {
         let input = s.to_owned();
         Ok(XmlParser {
             index: 0,
+            tab_width: 4,
             started_parsing: false,
             ignore_comments: true,
             position: FilePosition::new(),
@@ -317,6 +322,7 @@ impl XmlParser {
         File::open(filepath).ok()?.read_to_end(&mut buffer).ok()?;
         Some(XmlParser {
             index: 0,
+            tab_width: 4,
             started_parsing: false,
             ignore_comments: true,
             position: FilePosition::new(),
@@ -329,6 +335,11 @@ impl XmlParser {
 
     pub fn ignore_comments(&mut self, ignore_comments: bool) -> &mut XmlParser {
         self.ignore_comments = ignore_comments;
+        self
+    }
+
+    pub fn tab_width(&mut self, tab_width: usize) -> &mut XmlParser {
+        self.tab_width = tab_width;
         self
     }
 
@@ -519,7 +530,7 @@ impl XmlParser {
                                     } else {
                                         if !self.ignore_comments {
                                             self.errors.push(XmlError {
-                                                position: position,
+                                                position,
                                                 message: XmlParser::formatted_error(
                                                     &position,
                                                     "-- is not permitted within comments",
@@ -581,7 +592,7 @@ impl XmlParser {
                                                         );
                                                         if *index != front || name != text {
                                                             self.errors.push(XmlError {
-                                                                        position: position,
+                                                                        position,
                                                                         message: XmlParser::formatted_error(&raw_token.position, &format!("Mismatch between closing {} and opening {} elements",
                                                                         text, name)),
                                                                     });
@@ -589,7 +600,7 @@ impl XmlParser {
                                                     }
                                                 } else {
                                                     self.errors.push(XmlError {
-                                                        position: position,
+                                                        position,
                                                         message: XmlParser::formatted_error(
                                                             &raw_token.position,
                                                             "Mismatch between closing and opening elements",
@@ -603,7 +614,7 @@ impl XmlParser {
                                                         )
                                                         .to_string(),
                                                     ),
-                                                    position: position,
+                                                    position,
                                                     parent: open_element_index_stack
                                                         .front()
                                                         .copied(),
@@ -611,7 +622,7 @@ impl XmlParser {
                                                 self.xml_tokens.push(token);
                                                 if (raw_token_index + 1) >= self.raw_tokens.len() {
                                                     self.errors.push(XmlError {
-                                                        position: position,
+                                                        position,
                                                         message: XmlParser::formatted_error(
                                                             &raw_token.position,
                                                             "Expected '>'",
@@ -628,7 +639,7 @@ impl XmlParser {
                                                     KeyChar(index) => {
                                                         if self.stream[index] != b'>' {
                                                             self.errors.push(XmlError {
-                                                                position: position,
+                                                                position,
                                                                 message: XmlParser::formatted_error(
                                                                     &position,
                                                                     "Expected '>'",
@@ -639,7 +650,7 @@ impl XmlParser {
                                                     }
                                                     _ => {
                                                         self.errors.push(XmlError {
-                                                            position: position,
+                                                            position,
                                                             message: XmlParser::formatted_error(
                                                                 &position,
                                                                 "Expected '>'",
@@ -683,7 +694,7 @@ impl XmlParser {
                                                         .push_front(self.xml_tokens.len() - 1);
                                                 } else {
                                                     self.errors.push(XmlError {
-                                                        position: position,
+                                                        position,
                                                         message: XmlParser::formatted_error(
                                                             &position,
                                                             "Expected 'xml'",
@@ -693,7 +704,7 @@ impl XmlParser {
                                             }
                                             _ => {
                                                 self.errors.push(XmlError {
-                                                    position: position,
+                                                    position,
                                                     message: XmlParser::formatted_error(
                                                         &position,
                                                         "Expected 'xml'",
