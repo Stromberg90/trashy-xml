@@ -1,6 +1,6 @@
 [package]
 name = "trashy-xml"
-version = "0.5.3"
+version = "0.6.0"
 authors = ["Andreas Strømberg<andreas.stromberg90@gmail.com>"]
 description = "Less than stellar xml parser, but does what I need in a \"simple\" way"
 edition = "2018"

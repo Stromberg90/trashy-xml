@@ -343,13 +343,6 @@ impl XmlParser {
         self
     }
 
-    fn formatted_error(position: &FilePosition, message: &str) -> String {
-        format!(
-            "Error({}, {}): {}.",
-            position.line, position.column, message
-        )
-    }
-
     fn match_next_str(&self, index: usize, characters: &str) -> bool {
         if index + characters.chars().count() < self.raw_tokens.len() {
             for (token, character) in self.raw_tokens
@@ -398,10 +391,7 @@ impl XmlParser {
                     if open_element_index_stack.is_empty() {
                         self.errors.push(XmlError {
                             position: raw_token.position,
-                            message: XmlParser::formatted_error(
-                                &raw_token.position,
-                                "Document is empty",
-                            ),
+                            message: "Document is empty".to_owned(),
                         });
                         continue;
                     }
@@ -419,14 +409,11 @@ impl XmlParser {
                             Text(..) => {
                                 self.errors.push(XmlError {
                                     position: raw_token.position,
-                                    message: XmlParser::formatted_error(
-                                        &raw_token.position,
-                                        &format!(
-                                            "Specification mandates value for attribute {}",
-                                            String::from_utf8_lossy(
-                                                &self.stream[start_index..end_index]
-                                            )
-                                        ),
+                                    message: format!(
+                                        "Specification mandates value for attribute {}",
+                                        String::from_utf8_lossy(
+                                            &self.stream[start_index..end_index]
+                                        )
                                     ),
                                 });
                                 skip_loop = true;
@@ -453,10 +440,7 @@ impl XmlParser {
                             Text(..) => {
                                 self.errors.push(XmlError {
                                     position: raw_token.position,
-                                    message: XmlParser::formatted_error(
-                                        &raw_token.position,
-                                        "\" or \' expected",
-                                    ),
+                                    message: "\" or \' expected".to_owned(),
                                 });
                                 break;
                             }
@@ -531,10 +515,8 @@ impl XmlParser {
                                         if !self.ignore_comments {
                                             self.errors.push(XmlError {
                                                 position,
-                                                message: XmlParser::formatted_error(
-                                                    &position,
-                                                    "-- is not permitted within comments",
-                                                ),
+                                                message: "-- is not permitted within comments"
+                                                    .to_owned(),
                                             });
                                         }
                                         raw_token_index -= 2;
@@ -593,18 +575,15 @@ impl XmlParser {
                                                         if *index != front || name != text {
                                                             self.errors.push(XmlError {
                                                                         position,
-                                                                        message: XmlParser::formatted_error(&raw_token.position, &format!("Mismatch between closing {} and opening {} elements",
-                                                                        text, name)),
+                                                                        message: format!("Mismatch between closing {} and opening {} elements",
+                                                                        text, name),
                                                                     });
                                                         }
                                                     }
                                                 } else {
                                                     self.errors.push(XmlError {
                                                         position,
-                                                        message: XmlParser::formatted_error(
-                                                            &raw_token.position,
-                                                            "Mismatch between closing and opening elements",
-                                                        ),
+                                                        message: "Mismatch between closing and opening elements".to_owned()
                                                     });
                                                 }
                                                 let token = XmlToken {
@@ -623,10 +602,7 @@ impl XmlParser {
                                                 if (raw_token_index + 1) >= self.raw_tokens.len() {
                                                     self.errors.push(XmlError {
                                                         position,
-                                                        message: XmlParser::formatted_error(
-                                                            &raw_token.position,
-                                                            "Expected '>'",
-                                                        ),
+                                                        message: "Expected '>'".to_owned(),
                                                     });
                                                     break;
                                                 }
@@ -640,10 +616,7 @@ impl XmlParser {
                                                         if self.stream[index] != b'>' {
                                                             self.errors.push(XmlError {
                                                                 position,
-                                                                message: XmlParser::formatted_error(
-                                                                    &position,
-                                                                    "Expected '>'",
-                                                                ),
+                                                                message: "Expected '>'".to_owned(),
                                                             });
                                                             raw_token_index += 1;
                                                         }
@@ -651,10 +624,7 @@ impl XmlParser {
                                                     _ => {
                                                         self.errors.push(XmlError {
                                                             position,
-                                                            message: XmlParser::formatted_error(
-                                                                &position,
-                                                                "Expected '>'",
-                                                            ),
+                                                            message: "Expected '>'".to_owned(),
                                                         });
                                                         raw_token_index += 1;
                                                     }
@@ -695,20 +665,14 @@ impl XmlParser {
                                                 } else {
                                                     self.errors.push(XmlError {
                                                         position,
-                                                        message: XmlParser::formatted_error(
-                                                            &position,
-                                                            "Expected 'xml'",
-                                                        ),
+                                                        message: "Expected 'xml'".to_owned(),
                                                     });
                                                 }
                                             }
                                             _ => {
                                                 self.errors.push(XmlError {
                                                     position,
-                                                    message: XmlParser::formatted_error(
-                                                        &position,
-                                                        "Expected 'xml'",
-                                                    ),
+                                                    message: "Expected 'xml'".to_owned(),
                                                 });
                                             }
                                         }
@@ -774,10 +738,7 @@ impl XmlParser {
         if let Some(last) = open_element_index_stack.iter().last() {
             self.errors.push(XmlError {
                 position: self.xml_tokens[*last].position,
-                message: XmlParser::formatted_error(
-                    &self.xml_tokens[*last].position,
-                    "Mismatch between number of closing and opening elements",
-                ),
+                message: "Mismatch between number of closing and opening elements".to_owned(),
             });
         }
         Some(self)
