@@ -21,6 +21,7 @@ pub enum XmlKind {
     CloseElement(String),
 }
 
+// I think this should be on XmlToken instead
 impl XmlKind {
     pub fn is_comment(&self) -> bool {
         match self {
@@ -111,6 +112,7 @@ pub struct XmlParser {
     position: FilePosition,
     stream: Vec<u8>,
     raw_tokens: Vec<Token>,
+    raw_token_index: usize,
     pub xml_tokens: Vec<XmlToken>,
     pub errors: Vec<XmlError>,
 }
@@ -297,11 +299,22 @@ impl Iterator for XmlParser {
     }
 }
 
+#[derive(PartialEq, Debug, Clone)]
+pub struct XmlParserError(String);
+
+impl std::error::Error for XmlParserError {}
+
+impl std::fmt::Display for XmlParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl FromStr for XmlParser {
-    type Err = std::string::ParseError;
+    type Err = XmlParserError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let input = s.to_owned();
-        Ok(XmlParser {
+        Ok(Self {
             index: 0,
             tab_width: 4,
             started_parsing: false,
@@ -309,6 +322,7 @@ impl FromStr for XmlParser {
             position: FilePosition::new(),
             stream: input.into_bytes(),
             raw_tokens: Vec::new(),
+            raw_token_index: 0,
             xml_tokens: Vec::new(),
             errors: Vec::new(),
         })
@@ -317,20 +331,28 @@ impl FromStr for XmlParser {
 
 impl XmlParser {
     /// Constructs a new `XmlParser`.
-    pub fn new<P: AsRef<Path>>(filepath: P) -> Option<XmlParser> {
-        let mut buffer = Vec::new();
-        File::open(filepath).ok()?.read_to_end(&mut buffer).ok()?;
-        Some(XmlParser {
-            index: 0,
-            tab_width: 4,
-            started_parsing: false,
-            ignore_comments: true,
-            position: FilePosition::new(),
-            stream: buffer,
-            raw_tokens: Vec::new(),
-            xml_tokens: Vec::new(),
-            errors: Vec::new(),
-        })
+    pub fn new<P: AsRef<Path>>(filepath: P) -> Result<Self, XmlParserError> {
+        match File::open(filepath) {
+            Ok(mut file) => {
+                let mut buffer = Vec::new();
+                match file.read_to_end(&mut buffer) {
+                    Ok(_) => Ok(Self {
+                        index: 0,
+                        tab_width: 4,
+                        started_parsing: false,
+                        ignore_comments: true,
+                        position: FilePosition::new(),
+                        stream: buffer,
+                        raw_tokens: Vec::new(),
+                        raw_token_index: 0,
+                        xml_tokens: Vec::new(),
+                        errors: Vec::new(),
+                    }),
+                    Err(e) => return Err(XmlParserError(e.to_string())),
+                }
+            }
+            Err(e) => return Err(XmlParserError(e.to_string())),
+        }
     }
 
     pub fn ignore_comments(&mut self, ignore_comments: bool) -> &mut XmlParser {
@@ -373,22 +395,20 @@ impl XmlParser {
         false
     }
 
-    pub fn parse(&mut self) -> Option<&Self> {
+    pub fn parse(&mut self) {
         use TokenKind::*;
         use XmlKind::*;
 
         while let Some(token) = self.next() {
             self.raw_tokens.push(token);
         }
-        self.xml_tokens = Vec::with_capacity(self.raw_tokens.len() / 3);
 
-        let mut open_element_index_stack = VecDeque::<usize>::new();
-        let mut raw_token_index = 0;
-        while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
+        let mut open_elements = VecDeque::<usize>::new();
+        while let Some(raw_token) = self.raw_tokens.get(self.raw_token_index) {
             match raw_token.kind {
                 Text(start_index, end_index) => {
-                    raw_token_index += 1;
-                    if open_element_index_stack.is_empty() {
+                    self.raw_token_index += 1;
+                    if open_elements.is_empty() {
                         self.errors.push(XmlError {
                             position: raw_token.position,
                             message: "Document is empty".to_owned(),
@@ -397,12 +417,12 @@ impl XmlParser {
                     }
 
                     let mut skip_loop = false;
-                    while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
-                        raw_token_index += 1;
+                    while let Some(raw_token) = self.raw_tokens.get(self.raw_token_index) {
+                        self.raw_token_index += 1;
                         match raw_token.kind {
                             KeyChar(kc) => {
                                 if self.stream[kc] == b'=' {
-                                    raw_token_index -= 1;
+                                    self.raw_token_index -= 1;
                                     break;
                                 }
                             }
@@ -422,18 +442,18 @@ impl XmlParser {
                             _ => {}
                         }
                     }
-                    if raw_token_index >= self.raw_tokens.len() {
+                    if self.raw_token_index >= self.raw_tokens.len() {
                         break;
                     }
                     if skip_loop {
                         continue;
                     }
-                    while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
-                        raw_token_index += 1;
+                    while let Some(raw_token) = self.raw_tokens.get(self.raw_token_index) {
+                        self.raw_token_index += 1;
                         match raw_token.kind {
                             KeyChar(kc) => {
                                 if self.stream[kc] == b'"' || self.stream[kc] == b'\'' {
-                                    raw_token_index -= 1;
+                                    self.raw_token_index -= 1;
                                     break;
                                 }
                             }
@@ -447,14 +467,14 @@ impl XmlParser {
                             _ => {}
                         }
                     }
-                    if let Some(token) = self.raw_tokens.get(raw_token_index) {
+                    if let Some(token) = self.raw_tokens.get(self.raw_token_index) {
                         if let KeyChar(attribute_value_start) = token.kind {
                             let boundary_character = self.stream[attribute_value_start];
                             let attribute_value_start = attribute_value_start + 1;
                             let mut attribute_value_end = attribute_value_start;
                             loop {
-                                raw_token_index += 1;
-                                if let Some(token) = self.raw_tokens.get(raw_token_index) {
+                                self.raw_token_index += 1;
+                                if let Some(token) = self.raw_tokens.get(self.raw_token_index) {
                                     match token.kind {
                                         KeyChar(key_char_index) => {
                                             if self.stream[key_char_index] == boundary_character {
@@ -481,7 +501,7 @@ impl XmlParser {
                                     .to_string(),
                                 ),
                                 position: raw_token.position,
-                                parent: open_element_index_stack.front().copied(),
+                                parent: open_elements.front().copied(),
                             };
                             self.xml_tokens.push(token);
                         }
@@ -489,12 +509,14 @@ impl XmlParser {
                 }
                 KeyChar(kc) => match self.stream[kc] {
                     b'<' => {
-                        if self.match_next_str(raw_token_index, "!--") {
-                            raw_token_index += 4;
-                            let position = self.raw_tokens[raw_token_index].position;
+                        if self.match_next_str(self.raw_token_index, "!--") {
+                            self.raw_token_index += 4;
+                            let position = self.raw_tokens[self.raw_token_index].position;
                             let comment_start = kc + 4;
                             let mut comment_end = comment_start;
-                            while let Some(raw_token) = self.raw_tokens.get(raw_token_index + 1) {
+                            while let Some(raw_token) =
+                                self.raw_tokens.get(self.raw_token_index + 1)
+                            {
                                 if !self.ignore_comments {
                                     match raw_token.kind {
                                         KeyChar(..) => {
@@ -506,10 +528,10 @@ impl XmlParser {
                                         }
                                     }
                                 }
-                                if self.match_next_str(raw_token_index, "--") {
-                                    raw_token_index += 2;
-                                    if self.match_next_char(raw_token_index, '>') {
-                                        raw_token_index += 1;
+                                if self.match_next_str(self.raw_token_index, "--") {
+                                    self.raw_token_index += 2;
+                                    if self.match_next_char(self.raw_token_index, '>') {
+                                        self.raw_token_index += 1;
                                         break;
                                     } else {
                                         if !self.ignore_comments {
@@ -519,10 +541,10 @@ impl XmlParser {
                                                     .to_owned(),
                                             });
                                         }
-                                        raw_token_index -= 2;
+                                        self.raw_token_index -= 2;
                                     }
                                 }
-                                raw_token_index += 1;
+                                self.raw_token_index += 1;
                             }
                             if !self.ignore_comments {
                                 let token = XmlToken {
@@ -533,11 +555,13 @@ impl XmlParser {
                                         .to_string(),
                                     ),
                                     position,
-                                    parent: open_element_index_stack.front().copied(),
+                                    parent: open_elements.front().copied(),
                                 };
                                 self.xml_tokens.push(token);
                             }
-                        } else if let Some(raw_token) = self.raw_tokens.get(raw_token_index + 1) {
+                        } else if let Some(raw_token) =
+                            self.raw_tokens.get(self.raw_token_index + 1)
+                        {
                             let position = raw_token.position;
                             match raw_token.kind {
                                 Text(start_index, end_index) => {
@@ -550,22 +574,20 @@ impl XmlParser {
                                             self.xml_tokens.len(),
                                         ),
                                         position,
-                                        parent: open_element_index_stack.front().copied(),
+                                        parent: open_elements.front().copied(),
                                     };
-                                    open_element_index_stack.push_front(self.xml_tokens.len());
+                                    open_elements.push_front(self.xml_tokens.len());
                                     self.xml_tokens.push(token);
-                                    raw_token_index += 1;
+                                    self.raw_token_index += 1;
                                 }
                                 KeyChar(kc) => {
                                     if let b'/' = self.stream[kc] {
                                         if let Some(raw_token) =
-                                            self.raw_tokens.get(raw_token_index + 2)
+                                            self.raw_tokens.get(self.raw_token_index + 2)
                                         {
-                                            raw_token_index += 2;
+                                            self.raw_token_index += 2;
                                             if let Text(start_index, end_index) = raw_token.kind {
-                                                if let Some(front) =
-                                                    open_element_index_stack.pop_front()
-                                                {
+                                                if let Some(front) = open_elements.pop_front() {
                                                     if let OpenElement(name, index) =
                                                         &self.xml_tokens[front].kind
                                                     {
@@ -594,12 +616,12 @@ impl XmlParser {
                                                         .to_string(),
                                                     ),
                                                     position,
-                                                    parent: open_element_index_stack
-                                                        .front()
-                                                        .copied(),
+                                                    parent: open_elements.front().copied(),
                                                 };
                                                 self.xml_tokens.push(token);
-                                                if (raw_token_index + 1) >= self.raw_tokens.len() {
+                                                if (self.raw_token_index + 1)
+                                                    >= self.raw_tokens.len()
+                                                {
                                                     self.errors.push(XmlError {
                                                         position,
                                                         message: "Expected '>'".to_owned(),
@@ -607,18 +629,19 @@ impl XmlParser {
                                                     break;
                                                 }
                                                 while let Whitespace(..) =
-                                                    self.raw_tokens[raw_token_index + 1].kind
+                                                    self.raw_tokens[self.raw_token_index + 1].kind
                                                 {
-                                                    raw_token_index += 1;
+                                                    self.raw_token_index += 1;
                                                 }
-                                                match self.raw_tokens[raw_token_index + 1].kind {
+                                                match self.raw_tokens[self.raw_token_index + 1].kind
+                                                {
                                                     KeyChar(index) => {
                                                         if self.stream[index] != b'>' {
                                                             self.errors.push(XmlError {
                                                                 position,
                                                                 message: "Expected '>'".to_owned(),
                                                             });
-                                                            raw_token_index += 1;
+                                                            self.raw_token_index += 1;
                                                         }
                                                     }
                                                     _ => {
@@ -626,18 +649,18 @@ impl XmlParser {
                                                             position,
                                                             message: "Expected '>'".to_owned(),
                                                         });
-                                                        raw_token_index += 1;
+                                                        self.raw_token_index += 1;
                                                     }
                                                 }
                                             }
                                         }
                                     } else if let b'?' = self.stream[kc] {
-                                        raw_token_index += 1;
-                                        if raw_token_index + 1 >= self.raw_tokens.len() {
+                                        self.raw_token_index += 1;
+                                        if self.raw_token_index + 1 >= self.raw_tokens.len() {
                                             break;
                                         }
-                                        raw_token_index += 1;
-                                        match self.raw_tokens[raw_token_index].kind {
+                                        self.raw_token_index += 1;
+                                        match self.raw_tokens[self.raw_token_index].kind {
                                             Text(start_index, end_index) => {
                                                 let text = String::from_utf8_lossy(
                                                     &self.stream[start_index..end_index],
@@ -655,12 +678,10 @@ impl XmlParser {
                                                             self.xml_tokens.len(),
                                                         ),
                                                         position,
-                                                        parent: open_element_index_stack
-                                                            .front()
-                                                            .copied(),
+                                                        parent: open_elements.front().copied(),
                                                     };
                                                     self.xml_tokens.push(token);
-                                                    open_element_index_stack
+                                                    open_elements
                                                         .push_front(self.xml_tokens.len() - 1);
                                                 } else {
                                                     self.errors.push(XmlError {
@@ -683,14 +704,14 @@ impl XmlParser {
                         }
                     }
                     b'/' | b'?' => {
-                        if self.match_next_char(raw_token_index, '>') {
-                            if let Some(front) = open_element_index_stack.pop_front() {
+                        if self.match_next_char(self.raw_token_index, '>') {
+                            if let Some(front) = open_elements.pop_front() {
                                 if let OpenElement(parent_name, _) = &self.xml_tokens[front].kind {
-                                    let position = self.raw_tokens[raw_token_index].position;
+                                    let position = self.raw_tokens[self.raw_token_index].position;
                                     let token = XmlToken {
                                         kind: CloseElement(parent_name.into()),
                                         position,
-                                        parent: open_element_index_stack.front().copied(),
+                                        parent: open_elements.front().copied(),
                                     };
                                     self.xml_tokens.push(token);
                                 }
@@ -698,10 +719,10 @@ impl XmlParser {
                         }
                     }
                     b'>' => {
-                        raw_token_index += 1;
+                        self.raw_token_index += 1;
                         let text_start = kc + 1;
                         let mut text_end = text_start;
-                        while let Some(raw_token) = self.raw_tokens.get(raw_token_index) {
+                        while let Some(raw_token) = self.raw_tokens.get(self.raw_token_index) {
                             match raw_token.kind {
                                 Text(start_index, end_index)
                                 | Whitespace(start_index, end_index) => {
@@ -709,7 +730,7 @@ impl XmlParser {
                                 }
                                 KeyChar(kc) => match self.stream[kc] {
                                     b'<' => {
-                                        raw_token_index -= 1;
+                                        self.raw_token_index -= 1;
                                         break;
                                     }
                                     _ => {
@@ -717,7 +738,7 @@ impl XmlParser {
                                     }
                                 },
                             }
-                            raw_token_index += 1;
+                            self.raw_token_index += 1;
                         }
                         let token = XmlToken {
                             kind: InnerText(
@@ -725,7 +746,7 @@ impl XmlParser {
                                     .to_string(),
                             ),
                             position: raw_token.position,
-                            parent: open_element_index_stack.front().copied(),
+                            parent: open_elements.front().copied(),
                         };
                         self.xml_tokens.push(token);
                     }
@@ -733,15 +754,14 @@ impl XmlParser {
                 },
                 _ => {}
             }
-            raw_token_index += 1;
+            self.raw_token_index += 1;
         }
-        if let Some(last) = open_element_index_stack.iter().last() {
+        if let Some(last) = open_elements.iter().last() {
             self.errors.push(XmlError {
                 position: self.xml_tokens[*last].position,
                 message: "Mismatch between number of closing and opening elements".to_owned(),
             });
         }
-        Some(self)
     }
 }
 
@@ -853,42 +873,42 @@ mod tests {
     #[test]
     fn no_hang_01() {
         let mut parser = XmlParser::from_str(r#"`\"⽣ቋ<¥Ⱥ$+𛲜䒓ჇN&=១వ**À \"¥𐊣{¥ ""#).unwrap();
-        assert!(parser.parse().is_some());
+        parser.parse();
     }
     #[test]
     fn no_hang_02() {
         let mut parser =
             XmlParser::from_str(r#"?$i૧<ᮙ8\'\\9×g🩺ౚ᭖῁𝈄𒂳🕴*ᣍኾ?$fY    \\𑴃 \"%¥Z""#).unwrap();
-        assert!(parser.parse().is_some());
+        parser.parse();
     }
     #[test]
     fn fixed_index_out_of_bounds_crash_01() {
         let mut parser = XmlParser::from_str(r#"<A=🌀=a"#).unwrap();
-        assert!(parser.parse().is_some());
+        parser.parse();
     }
 
     #[test]
     fn fixed_index_out_of_bounds_crash_02() {
         let mut parser = XmlParser::from_str(r#"<Ⱥ\'`=<Ô"#).unwrap();
-        assert!(parser.parse().is_some());
+        parser.parse();
     }
 
     #[test]
     fn fixed_index_out_of_bounds_crash_03() {
         let mut parser = XmlParser::from_str(r#"<\u{fe00} #=\"0"#).unwrap();
-        assert!(parser.parse().is_some());
+        parser.parse();
     }
 
     #[test]
     fn fixed_index_out_of_bounds_crash_04() {
         let mut parser = XmlParser::from_str(r#"<?"#).unwrap();
-        assert!(parser.parse().is_some());
+        parser.parse();
     }
 
     #[test]
     fn empty_string() {
         let mut parser = XmlParser::from_str("").unwrap();
-        assert!(parser.parse().is_some());
+        parser.parse();
     }
 
     #[test]
