@@ -21,34 +21,33 @@ pub enum XmlKind {
     CloseElement(String),
 }
 
-// I think this should be on XmlToken instead
-impl XmlKind {
+impl XmlToken {
     pub fn is_comment(&self) -> bool {
-        match self {
+        match self.kind {
             XmlKind::Comment(..) => true,
             _ => false,
         }
     }
     pub fn is_attribute(&self) -> bool {
-        match self {
+        match self.kind {
             XmlKind::Attribute(..) => true,
             _ => false,
         }
     }
     pub fn is_inner_text(&self) -> bool {
-        match self {
+        match self.kind {
             XmlKind::InnerText(..) => true,
             _ => false,
         }
     }
     pub fn is_open_element(&self) -> bool {
-        match self {
+        match self.kind {
             XmlKind::OpenElement(..) => true,
             _ => false,
         }
     }
     pub fn is_close_element(&self) -> bool {
-        match self {
+        match self.kind {
             XmlKind::CloseElement(..) => true,
             _ => false,
         }
@@ -919,7 +918,7 @@ mod tests {
             parser
                 .xml_tokens
                 .iter()
-                .filter(|token| token.kind.is_open_element())
+                .filter(|token| token.is_open_element())
                 .count(),
             81841
         );
