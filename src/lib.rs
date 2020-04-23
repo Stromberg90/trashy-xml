@@ -95,7 +95,7 @@ pub struct XmlError {
 /// for token in &parser.xml_tokens {
 ///     if let XmlKind::OpenElement(name, _) = &token.kind {
 ///         if name == "element" {
-///             for attribute in parser.xml_tokens.get_attributes(token) {
+///             for attribute in parser.xml_tokens.attributes(token) {
 ///                 dbg!(&attribute);
 ///             }
 ///         }
@@ -118,7 +118,7 @@ pub struct XmlParser {
 
 /// Helper methods
 pub trait XmlMethods {
-    /// Gets all children tokens
+    /// Returns references to children tokens
     ///
     /// ```
     /// use trashy_xml::{XmlKind, XmlMethods, XmlParser};
@@ -126,14 +126,14 @@ pub trait XmlMethods {
     /// let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
     /// parser.parse();
     /// for token in &parser.xml_tokens {
-    ///    for child in parser.xml_tokens.get_children(token) {
+    ///    for child in parser.xml_tokens.children(token) {
     ///        dbg!(&child);
     ///    }
     /// }
     /// ```
-    fn get_children(&self, token: &XmlToken) -> Vec<&XmlToken>;
+    fn children(&self, token: &XmlToken) -> Vec<&XmlToken>;
 
-    /// Gets all attributes tokens
+    /// Returns references to attributes tokens
     ///
     /// ```
     /// use trashy_xml::{XmlKind, XmlMethods, XmlParser};
@@ -141,14 +141,14 @@ pub trait XmlMethods {
     /// let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
     /// parser.parse();
     /// for token in &parser.xml_tokens {
-    ///    for attribute in parser.xml_tokens.get_attributes(token) {
+    ///    for attribute in parser.xml_tokens.attributes(token) {
     ///        dbg!(&attribute);
     ///    }
     /// }
     /// ```
-    fn get_attributes(&self, token: &XmlToken) -> Vec<&XmlToken>;
+    fn attributes(&self, token: &XmlToken) -> Vec<&XmlToken>;
 
-    /// Gets all siblings tokens
+    /// Returns references to siblings tokens
     ///
     /// ```
     /// use trashy_xml::{XmlKind, XmlMethods, XmlParser};
@@ -156,16 +156,16 @@ pub trait XmlMethods {
     /// let mut parser = XmlParser::new("sample_files/small.xml").unwrap();
     /// parser.parse();
     /// for token in &parser.xml_tokens {
-    ///    for sibling in parser.xml_tokens.get_siblings(token) {
+    ///    for sibling in parser.xml_tokens.siblings(token) {
     ///        dbg!(&sibling);
     ///    }
     /// }
     /// ```
-    fn get_siblings(&self, token: &XmlToken) -> Vec<&XmlToken>;
+    fn siblings(&self, token: &XmlToken) -> Vec<&XmlToken>;
 }
 
 impl XmlMethods for Vec<XmlToken> {
-    fn get_children(&self, token: &XmlToken) -> Vec<&XmlToken> {
+    fn children(&self, token: &XmlToken) -> Vec<&XmlToken> {
         let mut result = Vec::<&XmlToken>::new();
         if let XmlKind::OpenElement(_, i) = &token.kind {
             for token in self.iter() {
@@ -179,7 +179,7 @@ impl XmlMethods for Vec<XmlToken> {
         result
     }
 
-    fn get_attributes(&self, token: &XmlToken) -> Vec<&XmlToken> {
+    fn attributes(&self, token: &XmlToken) -> Vec<&XmlToken> {
         let mut result = Vec::<&XmlToken>::new();
         if let XmlKind::OpenElement(_, i) = &token.kind {
             for token in self.iter() {
@@ -195,7 +195,7 @@ impl XmlMethods for Vec<XmlToken> {
         result
     }
 
-    fn get_siblings(&self, token: &XmlToken) -> Vec<&XmlToken> {
+    fn siblings(&self, token: &XmlToken) -> Vec<&XmlToken> {
         let mut result = Vec::<&XmlToken>::new();
         if let Some(token_parent) = &token.parent {
             for token in self.iter() {
@@ -860,7 +860,7 @@ mod tests {
         for token in &parser.xml_tokens {
             if let XmlKind::OpenElement(name, _) = &token.kind {
                 if name == "var_compond" {
-                    for _ in parser.xml_tokens.get_attributes(token) {
+                    for _ in parser.xml_tokens.attributes(token) {
                         attributes_len += 1;
                     }
                 }

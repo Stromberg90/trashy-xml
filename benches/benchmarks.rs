@@ -9,7 +9,7 @@ fn small_file_attributes() -> usize {
     for token in &parser.xml_tokens {
         if let XmlKind::OpenElement(name, _) = &token.kind {
             if name == "var_compond" {
-                for _ in parser.xml_tokens.get_attributes(token) {
+                for _ in parser.xml_tokens.attributes(token) {
                     result += 1;
                 }
             }
