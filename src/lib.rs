@@ -52,6 +52,36 @@ impl XmlToken {
             _ => false,
         }
     }
+    pub fn as_attribute_unchecked(&self) -> (&str, &str) {
+        match &self.kind {
+            XmlKind::Attribute(k,v) => (k,v),
+            _ => unreachable!(),
+        }
+    }
+    pub fn as_comment_unchecked(&self) -> &str {
+        match &self.kind {
+            XmlKind::Comment(comment) => comment,
+            _ => unreachable!(),
+        }
+    }
+    pub fn as_inner_text_unchecked(&self) -> &str {
+        match &self.kind {
+            XmlKind::InnerText(inner_text) => inner_text,
+            _ => unreachable!(),
+        }
+    }
+    pub fn as_open_element_unchecked(&self) -> (&str, usize) {
+        match &self.kind {
+            XmlKind::OpenElement(k,v) => (k,*v),
+            _ => unreachable!(),
+        }
+    }
+    pub fn as_close_element_unchecked(&self) -> &str {
+        match &self.kind {
+            XmlKind::CloseElement(k) => k,
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
