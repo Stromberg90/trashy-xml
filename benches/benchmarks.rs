@@ -15,22 +15,20 @@ fn small_file_attributes() -> usize {
             }
         }
     }
-    return result;
+    result
 }
 
 fn large_file_token_length() -> usize {
     // quick-xml was at 9ms
     let mut parser = XmlParser::new("sample_files/large.xml").unwrap();
     parser.parse();
-    return parser.xml_tokens.len();
+    parser.xml_tokens.len()
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("small_file_attributes", |b| {
-        b.iter(|| small_file_attributes())
-    });
+    c.bench_function("small_file_attributes", |b| b.iter(small_file_attributes));
     c.bench_function("large_file_token_length", |b| {
-        b.iter(|| large_file_token_length())
+        b.iter(large_file_token_length)
     });
 }
 

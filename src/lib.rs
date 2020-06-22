@@ -54,7 +54,7 @@ impl XmlToken {
     }
     pub fn as_attribute_unchecked(&self) -> (&str, &str) {
         match &self.kind {
-            XmlKind::Attribute(k,v) => (k,v),
+            XmlKind::Attribute(k, v) => (k, v),
             _ => unreachable!(),
         }
     }
@@ -72,7 +72,7 @@ impl XmlToken {
     }
     pub fn as_open_element_unchecked(&self) -> (&str, usize) {
         match &self.kind {
-            XmlKind::OpenElement(k,v) => (k,*v),
+            XmlKind::OpenElement(k, v) => (k, *v),
             _ => unreachable!(),
         }
     }
@@ -293,7 +293,12 @@ impl Iterator for XmlParser {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(v) = lexer::next(self) {
-            if !is_key_char(v) {
+            if is_key_char(v) {
+                Some(Token {
+                    position: self.position,
+                    kind: TokenKind::KeyChar(self.index),
+                })
+            } else {
                 if v.is_ascii_whitespace() {
                     let start_index = self.index;
                     while lexer::peek(self)?.is_ascii_whitespace() {
@@ -315,11 +320,6 @@ impl Iterator for XmlParser {
                 Some(Token {
                     position: self.position,
                     kind: TokenKind::Text(start_index, self.index + 1),
-                })
-            } else {
-                Some(Token {
-                    position: self.position,
-                    kind: TokenKind::KeyChar(self.index),
                 })
             }
         } else {
@@ -377,10 +377,10 @@ impl XmlParser {
                         xml_tokens: Vec::new(),
                         errors: Vec::new(),
                     }),
-                    Err(e) => return Err(XmlParserError(e.to_string())),
+                    Err(e) => Err(XmlParserError(e.to_string())),
                 }
             }
-            Err(e) => return Err(XmlParserError(e.to_string())),
+            Err(e) => Err(XmlParserError(e.to_string())),
         }
     }
 

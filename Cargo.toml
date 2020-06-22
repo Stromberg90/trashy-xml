@@ -12,10 +12,11 @@ readme = "README.md"
 keywords = ["xml", "parser"]
 categories = ["parsing", "text-processing"]
 license = "MIT"
+include = ["src/lib.rs", "LICENSE", "README.md", "sample_files"]
 
 [dev-dependencies]
-proptest = "0.9.5"
-criterion = "0.3"
+proptest = "0.10.0"
+criterion = "0.3.2"
 
 [[bench]]
 name = "benchmarks"
