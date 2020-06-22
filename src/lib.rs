@@ -428,9 +428,7 @@ impl XmlParser {
         use TokenKind::*;
         use XmlKind::*;
 
-        while let Some(token) = self.next() {
-            self.raw_tokens.push(token);
-        }
+        self.raw_tokens = self.collect();
 
         let mut open_elements = VecDeque::<usize>::new();
         while let Some(raw_token) = self.raw_tokens.get(self.raw_token_index) {
