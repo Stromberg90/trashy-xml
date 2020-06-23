@@ -449,7 +449,6 @@ impl XmlParser {
                         match raw_token.kind {
                             KeyChar(kc) => {
                                 if self.stream[kc] == b'=' {
-                                    self.raw_token_index -= 1;
                                     break;
                                 }
                             }
@@ -476,11 +475,9 @@ impl XmlParser {
                         continue;
                     }
                     while let Some(raw_token) = self.raw_tokens.get(self.raw_token_index) {
-                        self.raw_token_index += 1;
                         match raw_token.kind {
                             KeyChar(kc) => {
                                 if self.stream[kc] == b'"' || self.stream[kc] == b'\'' {
-                                    self.raw_token_index -= 1;
                                     break;
                                 }
                             }
@@ -493,6 +490,7 @@ impl XmlParser {
                             }
                             _ => {}
                         }
+                        self.raw_token_index += 1;
                     }
                     if let Some(token) = self.raw_tokens.get(self.raw_token_index) {
                         if let KeyChar(attribute_value_start) = token.kind {
@@ -560,15 +558,13 @@ impl XmlParser {
                                     if self.match_next_char(self.raw_token_index, '>') {
                                         self.raw_token_index += 1;
                                         break;
-                                    } else {
-                                        if !self.ignore_comments {
-                                            self.errors.push(XmlError {
-                                                position,
-                                                message: "-- is not permitted within comments"
-                                                    .to_owned(),
-                                            });
-                                        }
-                                        self.raw_token_index -= 2;
+                                    }
+                                    if !self.ignore_comments {
+                                        self.errors.push(XmlError {
+                                            position,
+                                            message: "-- is not permitted within comments"
+                                                .to_owned(),
+                                        });
                                     }
                                 }
                                 self.raw_token_index += 1;
@@ -746,10 +742,9 @@ impl XmlParser {
                         }
                     }
                     b'>' => {
-                        self.raw_token_index += 1;
                         let text_start = kc + 1;
                         let mut text_end = text_start;
-                        while let Some(raw_token) = self.raw_tokens.get(self.raw_token_index) {
+                        while let Some(raw_token) = self.raw_tokens.get(self.raw_token_index + 1) {
                             match raw_token.kind {
                                 Text(start_index, end_index)
                                 | Whitespace(start_index, end_index) => {
@@ -757,7 +752,6 @@ impl XmlParser {
                                 }
                                 KeyChar(kc) => match self.stream[kc] {
                                     b'<' => {
-                                        self.raw_token_index -= 1;
                                         break;
                                     }
                                     _ => {

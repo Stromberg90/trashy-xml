@@ -11,3 +11,4 @@ cc 24a5f076be3d23a9753053c4608a76a1ae2fd64ddb70310ad151c7f8cf335e42 # shrinks to
 cc 510e1ef894ffc17acaced25e44c8d6cb09d2aec368de822b6562977d4058f27d # shrinks to s = "<?"
 cc 7194129dcb38c20071652fdc3112547ce80899395b39d9b0bc1f9f516a01a631 # shrinks to s = "<\u{bd7}=࿅🌀 𛲜=a=\"\">\n</>"
 cc c99a83fdf19695effcc7f94b04fd1ffe10810e064cd9b8f6ce11ad756fea0233 # shrinks to s = "< =\"\">\n</￼>"
+cc 5f68de30c5e2cc8ad1344b10eb3bd489504ac90705e6cdb0737d80bccfd69cd5 # shrinks to s = ">"
