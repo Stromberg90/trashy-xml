@@ -14,7 +14,7 @@ enum TokenKind {
     Text(usize, usize),
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum XmlKind {
     Comment(String),
     Attribute(String, String),
@@ -341,11 +341,12 @@ impl XmlParser {
     }
 
     fn match_next_str(&self, index: usize, characters: &str) -> bool {
-        if index + characters.chars().count() < self.raw_tokens.len() {
-            for (token, character) in self.raw_tokens
-                [index + 1..=index + characters.chars().count()]
+        let chars = characters.chars();
+        let chars_count = chars.clone().count();
+        if index + chars_count < self.raw_tokens.len() {
+            for (token, character) in self.raw_tokens[index + 1..=index + chars_count]
                 .iter()
-                .zip(characters.chars())
+                .zip(chars)
             {
                 if let TokenKind::KeyChar(kc) = token.kind {
                     if self.buffer[kc] as char != character {
@@ -378,6 +379,7 @@ impl XmlParser {
 
         let mut open_elements = VecDeque::<usize>::new();
         while let Some(raw_token) = self.raw_tokens.get(self.raw_token_index) {
+            let parent = open_elements.front().copied();
             match raw_token.kind {
                 Text(start_index, end_index) => {
                     self.raw_token_index += 1;
@@ -385,12 +387,10 @@ impl XmlParser {
                         self.xml_tokens.push(XmlToken {
                             position: raw_token.position,
                             kind: XmlKind::Error("Document is empty".into()),
-                            parent: open_elements.front().copied(),
+                            parent: None,
                         });
                         continue;
                     }
-
-                    let mut skip_loop = false;
                     while let Some(raw_token) = self.raw_tokens.get(self.raw_token_index) {
                         self.raw_token_index += 1;
                         match raw_token.kind {
@@ -408,19 +408,12 @@ impl XmlParser {
                                             &self.buffer[start_index..end_index]
                                         )
                                     )),
-                                    parent: open_elements.front().copied(),
+                                    parent,
                                 });
-                                skip_loop = true;
                                 break;
                             }
                             _ => {}
                         }
-                    }
-                    if self.raw_token_index >= self.raw_tokens.len() {
-                        break;
-                    }
-                    if skip_loop {
-                        continue;
                     }
                     while let Some(raw_token) = self.raw_tokens.get(self.raw_token_index) {
                         match raw_token.kind {
@@ -433,7 +426,7 @@ impl XmlParser {
                                 self.xml_tokens.push(XmlToken {
                                     position: raw_token.position,
                                     kind: XmlKind::Error("\" or \' expected".into()),
-                                    parent: open_elements.front().copied(),
+                                    parent,
                                 });
                                 break;
                             }
@@ -475,7 +468,7 @@ impl XmlParser {
                                     .to_string(),
                                 ),
                                 position: raw_token.position,
-                                parent: open_elements.front().copied(),
+                                parent,
                             };
                             self.xml_tokens.push(token);
                         }
@@ -514,7 +507,7 @@ impl XmlParser {
                                             kind: XmlKind::Error(
                                                 "-- is not permitted within comments".into(),
                                             ),
-                                            parent: open_elements.front().copied(),
+                                            parent,
                                         });
                                     }
                                 }
@@ -529,7 +522,7 @@ impl XmlParser {
                                         .to_string(),
                                     ),
                                     position,
-                                    parent: open_elements.front().copied(),
+                                    parent,
                                 };
                                 self.xml_tokens.push(token);
                             }
@@ -548,7 +541,7 @@ impl XmlParser {
                                             self.xml_tokens.len(),
                                         ),
                                         position,
-                                        parent: open_elements.front().copied(),
+                                        parent,
                                     };
                                     open_elements.push_front(self.xml_tokens.len());
                                     self.xml_tokens.push(token);
@@ -575,14 +568,14 @@ impl XmlParser {
                                                         )
                                                         .to_string();
                                                         if index != front || name != text {
-                                                            self.xml_tokens.push(XmlToken {position, kind: XmlKind::Error(format!("Mismatch between closing {} and opening {} elements", text, name)), parent: open_elements.front().copied(), });
+                                                            self.xml_tokens.push(XmlToken {position, kind: XmlKind::Error(format!("Mismatch between closing {} and opening {} elements", text, name)), parent, });
                                                         }
                                                     }
                                                 } else {
                                                     self.xml_tokens.push(XmlToken {
                                                         position,
                                                         kind: XmlKind::Error("Mismatch between closing and opening elements".into()),
-                                                        parent: open_elements.front().copied(),
+                                                        parent,
                                                     });
                                                 }
                                                 let token = XmlToken {
@@ -593,7 +586,7 @@ impl XmlParser {
                                                         .to_string(),
                                                     ),
                                                     position,
-                                                    parent: open_elements.front().copied(),
+                                                    parent,
                                                 };
                                                 self.xml_tokens.push(token);
                                                 if (self.raw_token_index + 1)
@@ -602,7 +595,7 @@ impl XmlParser {
                                                     self.xml_tokens.push(XmlToken {
                                                         position,
                                                         kind: XmlKind::Error("Expected '>'".into()),
-                                                        parent: open_elements.front().copied(),
+                                                        parent,
                                                     });
                                                     break;
                                                 }
@@ -633,7 +626,7 @@ impl XmlParser {
                                                             kind: XmlKind::Error(
                                                                 "Expected '>'".into(),
                                                             ),
-                                                            parent: open_elements.front().copied(),
+                                                            parent,
                                                         });
                                                         self.raw_token_index += 1;
                                                     }
@@ -689,7 +682,7 @@ impl XmlParser {
                                     let token = XmlToken {
                                         kind: CloseElement(parent_name.into()),
                                         position,
-                                        parent: open_elements.front().copied(),
+                                        parent,
                                     };
                                     self.xml_tokens.push(token);
                                 }
@@ -722,7 +715,7 @@ impl XmlParser {
                                     .to_string(),
                             ),
                             position: raw_token.position,
-                            parent: open_elements.front().copied(),
+                            parent,
                         };
                         self.xml_tokens.push(token);
                     }
