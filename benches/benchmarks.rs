@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use trashy_xml::{XmlKind, XmlMethods, XmlParser};
+use trashy_xml::{XmlKind, XmlParser};
 
 fn small_file_attributes() -> usize {
     // quick-xml was at 30us
@@ -9,7 +9,7 @@ fn small_file_attributes() -> usize {
     for token in &parser.xml_tokens {
         if let XmlKind::OpenElement(name, _) = &token.kind {
             if name == "var_compond" {
-                for _ in parser.xml_tokens.attributes(token) {
+                for _ in parser.attributes(token) {
                     result += 1;
                 }
             }

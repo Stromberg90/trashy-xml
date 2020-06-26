@@ -1,5 +1,6 @@
 use super::*;
 
+#[inline(always)]
 pub fn peek(xml_parser: &XmlParser) -> Option<u8> {
     if let Some(character) = xml_parser.buffer.get(xml_parser.index + 1) {
         return Some(*character);
@@ -7,6 +8,7 @@ pub fn peek(xml_parser: &XmlParser) -> Option<u8> {
     None
 }
 
+#[inline(always)]
 pub fn next(xml_parser: &mut XmlParser) -> Option<u8> {
     if xml_parser.started_parsing {
         xml_parser.index += 1;
@@ -24,7 +26,7 @@ pub fn next(xml_parser: &mut XmlParser) -> Option<u8> {
                 }
             }
             b'\t' => {
-                xml_parser.position.column += xml_parser.tab_width;
+                xml_parser.position.column += xml_parser.settings.tab_width;
             }
             b'\n' => {
                 xml_parser.position.line += 1;
