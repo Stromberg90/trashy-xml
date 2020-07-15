@@ -25,59 +25,48 @@ pub enum XmlKind {
 }
 
 impl XmlToken {
-    #[inline(always)]
     pub fn is_comment(&self) -> bool {
         matches!(self.kind, XmlKind::Comment(..))
     }
-    #[inline(always)]
     pub fn is_attribute(&self) -> bool {
         matches!(self.kind, XmlKind::Attribute(..))
     }
-    #[inline(always)]
     pub fn is_inner_text(&self) -> bool {
         matches!(self.kind, XmlKind::InnerText(..))
     }
-    #[inline(always)]
     pub fn is_open_element(&self) -> bool {
         matches!(self.kind, XmlKind::OpenElement(..))
     }
-    #[inline(always)]
     pub fn is_close_element(&self) -> bool {
         matches!(self.kind, XmlKind::CloseElement(..))
     }
-    #[inline(always)]
     pub fn is_error(&self) -> bool {
         matches!(self.kind, XmlKind::Error(..))
     }
-    #[inline(always)]
     pub fn as_attribute_unchecked(&self) -> (&str, &str) {
         match &self.kind {
             XmlKind::Attribute(k, v) => (k, v),
             _ => unreachable!(),
         }
     }
-    #[inline(always)]
     pub fn as_comment_unchecked(&self) -> &str {
         match &self.kind {
             XmlKind::Comment(comment) => comment,
             _ => unreachable!(),
         }
     }
-    #[inline(always)]
     pub fn as_inner_text_unchecked(&self) -> &str {
         match &self.kind {
             XmlKind::InnerText(inner_text) => inner_text,
             _ => unreachable!(),
         }
     }
-    #[inline(always)]
     pub fn as_open_element_unchecked(&self) -> (&str, usize) {
         match &self.kind {
             XmlKind::OpenElement(k, v) => (k, *v),
             _ => unreachable!(),
         }
     }
-    #[inline(always)]
     pub fn as_close_element_unchecked(&self) -> &str {
         match &self.kind {
             XmlKind::CloseElement(k) => k,
@@ -93,7 +82,6 @@ pub struct FilePosition {
 }
 
 impl FilePosition {
-    #[inline(always)]
     fn new() -> FilePosition {
         FilePosition { line: 1, column: 1 }
     }
@@ -116,7 +104,6 @@ trait BytesToString {
 }
 
 impl BytesToString for [u8] {
-    #[inline(always)]
     fn to_string(&self) -> String {
         String::from_utf8_lossy(self).to_string()
     }
