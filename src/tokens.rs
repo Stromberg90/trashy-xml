@@ -1,7 +1,7 @@
 use smartstring::alias::String;
 
 #[derive(PartialEq)]
-pub(crate) enum TokenKind {
+pub enum TokenKind {
     KeyChar(usize),
     Whitespace(usize, usize),
     Text(usize, usize),
@@ -18,7 +18,7 @@ pub enum XmlKind {
 }
 
 impl XmlToken {
-    pub(crate) fn comment(str: String) -> XmlToken {
+    pub fn comment(str: String) -> XmlToken {
         XmlToken {
             kind: XmlKind::Comment(str),
             position: FilePosition::new(),
@@ -26,7 +26,7 @@ impl XmlToken {
         }
     }
 
-    pub(crate) fn attribute(name: String, value: String) -> XmlToken {
+    pub fn attribute(name: String, value: String) -> XmlToken {
         XmlToken {
             kind: XmlKind::Attribute(name, value),
             position: FilePosition::new(),
@@ -34,7 +34,7 @@ impl XmlToken {
         }
     }
 
-    pub(crate) fn inner_text(str: String) -> XmlToken {
+    pub fn inner_text(str: String) -> XmlToken {
         XmlToken {
             kind: XmlKind::InnerText(str),
             position: FilePosition::new(),
@@ -42,7 +42,7 @@ impl XmlToken {
         }
     }
 
-    pub(crate) fn open_element(str: String, id: usize) -> XmlToken {
+    pub fn open_element(str: String, id: usize) -> XmlToken {
         XmlToken {
             kind: XmlKind::OpenElement(str, id),
             position: FilePosition::new(),
@@ -50,7 +50,7 @@ impl XmlToken {
         }
     }
 
-    pub(crate) fn close_element(str: String) -> XmlToken {
+    pub fn close_element(str: String) -> XmlToken {
         XmlToken {
             kind: XmlKind::CloseElement(str),
             position: FilePosition::new(),
@@ -58,7 +58,7 @@ impl XmlToken {
         }
     }
 
-    pub(crate) fn error(str: String) -> XmlToken {
+    pub fn error(str: String) -> XmlToken {
         XmlToken {
             kind: XmlKind::Error(str),
             position: FilePosition::new(),
@@ -66,12 +66,12 @@ impl XmlToken {
         }
     }
 
-    pub(crate) fn position(mut self, position: FilePosition) -> XmlToken {
+    pub fn position(mut self, position: FilePosition) -> XmlToken {
         self.position = position;
         self
     }
 
-    pub(crate) fn parent(mut self, parent: Option<usize>) -> XmlToken {
+    pub fn parent(mut self, parent: Option<usize>) -> XmlToken {
         self.parent = parent;
         self
     }
@@ -149,8 +149,8 @@ impl FilePosition {
 }
 
 pub struct Token {
-    pub(crate) position: FilePosition,
-    pub(crate) kind: TokenKind,
+    pub position: FilePosition,
+    pub kind: TokenKind,
 }
 
 #[derive(PartialEq)]
@@ -160,13 +160,13 @@ pub struct XmlToken {
     pub parent: Option<usize>,
 }
 
-pub(crate) struct RawTokens {
-    pub(crate) tokens: Vec<Token>,
-    pub(crate) index: usize,
+pub struct RawTokens {
+    pub tokens: Vec<Token>,
+    pub index: usize,
 }
 
 impl RawTokens {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         RawTokens {
             tokens: Vec::new(),
             index: 0,
