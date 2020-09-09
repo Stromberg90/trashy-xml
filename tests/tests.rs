@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use tokens::XmlKind;
 use trashy_xml::*;
 
 #[test]

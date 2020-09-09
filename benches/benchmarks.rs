@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use trashy_xml::{XmlKind, XmlParser};
+use trashy_xml::{tokens::XmlKind, XmlParser};
 
 fn small_file_attributes() -> usize {
     // quick-xml was at 30us
@@ -25,8 +25,26 @@ fn large_file_token_length() -> usize {
     parser.xml_tokens.len()
 }
 
+fn medium_file_attributes() -> usize {
+    // quick-xml was at 30us
+    let mut result = 0;
+    let mut parser = XmlParser::new("sample_files/medium.xml").unwrap();
+    parser.parse();
+    for token in &parser.xml_tokens {
+        if let XmlKind::OpenElement(name, _) = &token.kind {
+            if name == "Text" {
+                for _ in parser.attributes(token) {
+                    result += 1;
+                }
+            }
+        }
+    }
+    result
+}
+
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("small_file_attributes", |b| b.iter(small_file_attributes));
+    c.bench_function("medium_file_attributes", |b| b.iter(medium_file_attributes));
     c.bench_function("large_file_token_length", |b| {
         b.iter(large_file_token_length)
     });
