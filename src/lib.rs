@@ -25,7 +25,7 @@ impl BytesToString for [u8] {
 }
 
 struct Settings {
-    tab_width: usize,
+    tab_width: u8,
     ignore_comments: bool,
 }
 
@@ -49,7 +49,7 @@ pub struct XmlParser {
     settings: Settings,
     started_parsing: bool,
     position: FilePosition,
-    index: usize,
+    index: u32,
     buffer: Vec<u8>,
     raw_tokens: RawTokens,
     pub xml_tokens: Vec<XmlToken>,
@@ -156,7 +156,7 @@ impl XmlParser {
         self
     }
 
-    pub fn tab_width(&mut self, tab_width: usize) -> &mut XmlParser {
+    pub fn tab_width(&mut self, tab_width: u8) -> &mut XmlParser {
         self.settings.tab_width = tab_width;
         self
     }
@@ -171,7 +171,7 @@ impl XmlParser {
                 .zip(chars)
                 .all(|(t, c)| {
                     if let TokenKind::KeyChar(kc) = t.kind {
-                        if self.buffer[kc] as char != c {
+                        if self.buffer[kc as usize] as char != c {
                             return false;
                         }
                     } else {
@@ -192,7 +192,7 @@ impl XmlParser {
     fn match_next_char(&mut self, character: char) -> bool {
         if let Some(token) = self.raw_tokens.tokens.get(self.raw_tokens.index + 1) {
             if let TokenKind::KeyChar(kc) = token.kind {
-                if self.buffer[kc] as char == character {
+                if self.buffer[kc as usize] as char == character {
                     self.raw_tokens.index += 1;
                     return true;
                 }
@@ -282,7 +282,7 @@ impl XmlParser {
 
         self.raw_tokens.tokens = self.collect();
 
-        let mut open_elements = VecDeque::<usize>::new();
+        let mut open_elements = VecDeque::<u32>::new();
         while let Some(raw_token) = self.raw_tokens.tokens.get(self.raw_tokens.index) {
             let parent = open_elements.front().copied();
             match raw_token.kind {
@@ -299,7 +299,7 @@ impl XmlParser {
                         self.raw_tokens.index += 1;
                         match raw_token.kind {
                             KeyChar(kc) => {
-                                if self.buffer[kc] == b'=' {
+                                if self.buffer[kc as usize] == b'=' {
                                     break;
                                 }
                             }
@@ -308,7 +308,8 @@ impl XmlParser {
                                     XmlToken::error(
                                         format!(
                                             "Specification mandates value for attribute {}",
-                                            &self.buffer[start_index..end_index].to_string()
+                                            &self.buffer[start_index as usize..end_index as usize]
+                                                .to_string()
                                         )
                                         .into(),
                                     )
@@ -323,7 +324,9 @@ impl XmlParser {
                     while let Some(raw_token) = self.raw_tokens.tokens.get(self.raw_tokens.index) {
                         match raw_token.kind {
                             KeyChar(kc) => {
-                                if self.buffer[kc] == b'"' || self.buffer[kc] == b'\'' {
+                                if self.buffer[kc as usize] == b'"'
+                                    || self.buffer[kc as usize] == b'\''
+                                {
                                     break;
                                 }
                             }
@@ -341,7 +344,7 @@ impl XmlParser {
                     }
                     if let Some(token) = self.raw_tokens.tokens.get(self.raw_tokens.index) {
                         if let KeyChar(attribute_value_start) = token.kind {
-                            let boundary_character = self.buffer[attribute_value_start];
+                            let boundary_character = self.buffer[attribute_value_start as usize];
                             let attribute_value_start = attribute_value_start + 1;
                             let mut attribute_value_end = attribute_value_start;
                             loop {
@@ -351,7 +354,9 @@ impl XmlParser {
                                 {
                                     match token.kind {
                                         KeyChar(key_char_index) => {
-                                            if self.buffer[key_char_index] == boundary_character {
+                                            if self.buffer[key_char_index as usize]
+                                                == boundary_character
+                                            {
                                                 break;
                                             }
                                             attribute_value_end += 1;
@@ -366,8 +371,10 @@ impl XmlParser {
                                 }
                             }
                             let token = XmlToken::attribute(
-                                self.buffer[start_index..end_index].to_string(),
-                                self.buffer[attribute_value_start..attribute_value_end].to_string(),
+                                self.buffer[start_index as usize..end_index as usize].to_string(),
+                                self.buffer
+                                    [attribute_value_start as usize..attribute_value_end as usize]
+                                    .to_string(),
                             )
                             .position(raw_token.position)
                             .parent(parent);
@@ -375,7 +382,7 @@ impl XmlParser {
                         }
                     }
                 }
-                KeyChar(kc) => match self.buffer[kc] {
+                KeyChar(kc) => match self.buffer[kc as usize] {
                     b'<' => {
                         if self.match_next_str("!--") {
                             self.raw_tokens.index += 1;
@@ -414,7 +421,8 @@ impl XmlParser {
                             }
                             if !self.settings.ignore_comments {
                                 let token = XmlToken::comment(
-                                    self.buffer[comment_start..comment_end].to_string(),
+                                    self.buffer[comment_start as usize..comment_end as usize]
+                                        .to_string(),
                                 )
                                 .position(position)
                                 .parent(parent);
@@ -427,35 +435,31 @@ impl XmlParser {
                             match raw_token.kind {
                                 Text(start_index, end_index) => {
                                     let token = XmlToken::open_element(
-                                        self.buffer[start_index..end_index].to_string(),
-                                        self.xml_tokens.len(),
+                                        self.buffer[start_index as usize..end_index as usize]
+                                            .to_string(),
+                                        self.xml_tokens.len() as u32,
                                     )
                                     .position(position)
                                     .parent(parent);
-                                    open_elements.push_front(self.xml_tokens.len());
+                                    open_elements.push_front(self.xml_tokens.len() as u32);
                                     self.xml_tokens.push(token);
                                     self.raw_tokens.index += 1;
                                 }
                                 KeyChar(kc) => {
-                                    if let b'/' = self.buffer[kc] {
+                                    if let b'/' = self.buffer[kc as usize] {
                                         if let Some(raw_token) =
                                             self.raw_tokens.tokens.get(self.raw_tokens.index + 2)
                                         {
                                             self.raw_tokens.index += 2;
                                             if let Text(start_index, end_index) = raw_token.kind {
                                                 if let Some(front) = open_elements.pop_front() {
-                                                    if matches!(
-                                                        self.xml_tokens[front].kind,
-                                                        XmlKind::OpenElement(..)
-                                                    ) {
-                                                        let open_element = self.xml_tokens[front]
-                                                            .as_open_element_unchecked();
-                                                        let name = open_element.0.to_owned();
-                                                        let index = open_element.1;
-                                                        let text = self.buffer
-                                                            [start_index..end_index]
+                                                    if let XmlKind::OpenElement(name, index) =
+                                                        &self.xml_tokens[front as usize].kind
+                                                    {
+                                                        let text = self.buffer[start_index as usize
+                                                            ..end_index as usize]
                                                             .to_string();
-                                                        if index != front || name != text {
+                                                        if *index != front as u32 || name != &text {
                                                             self.xml_tokens.push(
                                                                 XmlToken::error(format!("Mismatch between closing {} and opening {} elements", text, name).into())
                                                                 .position(position)
@@ -466,7 +470,9 @@ impl XmlParser {
                                                     self.xml_tokens.push(XmlToken::error("Mismatch between closing and opening elements".into()).position(position).parent(parent));
                                                 }
                                                 let token = XmlToken::close_element(
-                                                    self.buffer[start_index..end_index].to_string(),
+                                                    self.buffer
+                                                        [start_index as usize..end_index as usize]
+                                                        .to_string(),
                                                 )
                                                 .position(position)
                                                 .parent(parent);
@@ -492,7 +498,7 @@ impl XmlParser {
                                                     .kind
                                                 {
                                                     KeyChar(index) => {
-                                                        if self.buffer[index] != b'>' {
+                                                        if self.buffer[index as usize] != b'>' {
                                                             self.xml_tokens.push(
                                                                 XmlToken::error(
                                                                     "Expected '>'".into(),
@@ -516,7 +522,7 @@ impl XmlParser {
                                                 }
                                             }
                                         }
-                                    } else if let b'?' = self.buffer[kc] {
+                                    } else if let b'?' = self.buffer[kc as usize] {
                                         self.raw_tokens.index += 2;
                                         if self.raw_tokens.index >= self.raw_tokens.tokens.len() {
                                             break;
@@ -525,14 +531,17 @@ impl XmlParser {
                                         if let Text(start_index, end_index) =
                                             self.raw_tokens.tokens[self.raw_tokens.index].kind
                                         {
-                                            let text =
-                                                self.buffer[start_index..end_index].to_string();
+                                            let text = self.buffer
+                                                [start_index as usize..end_index as usize]
+                                                .to_string();
                                             if text.as_str() == "xml" {
                                                 let element_name = format!(
                                                     "?{}",
-                                                    self.buffer[start_index..end_index].to_string()
+                                                    self.buffer
+                                                        [start_index as usize..end_index as usize]
+                                                        .to_string()
                                                 );
-                                                let parent_index = self.xml_tokens.len();
+                                                let parent_index = self.xml_tokens.len() as u32;
                                                 let token = XmlToken::open_element(
                                                     element_name.into(),
                                                     parent_index,
@@ -559,7 +568,9 @@ impl XmlParser {
                         if self.match_next_char('>') {
                             self.raw_tokens.index -= 1;
                             if let Some(front) = open_elements.pop_front() {
-                                if let OpenElement(parent_name, _) = &self.xml_tokens[front].kind {
+                                if let OpenElement(parent_name, _) =
+                                    &self.xml_tokens[front as usize].kind
+                                {
                                     let position =
                                         self.raw_tokens.tokens[self.raw_tokens.index].position;
                                     let token = XmlToken::close_element(parent_name.to_owned())
@@ -581,7 +592,7 @@ impl XmlParser {
                                 | Whitespace(start_index, end_index) => {
                                     text_end += end_index - start_index;
                                 }
-                                KeyChar(kc) => match self.buffer[kc] {
+                                KeyChar(kc) => match self.buffer[kc as usize] {
                                     b'<' => {
                                         break;
                                     }
@@ -592,11 +603,14 @@ impl XmlParser {
                             }
                             self.raw_tokens.index += 1;
                         }
-                        let token =
-                            XmlToken::inner_text(self.buffer[text_start..text_end].to_string())
-                                .position(raw_token.position)
-                                .parent(parent);
-                        self.xml_tokens.push(token);
+
+                        self.xml_tokens.push(
+                            XmlToken::inner_text(
+                                self.buffer[text_start as usize..text_end as usize].to_string(),
+                            )
+                            .position(raw_token.position)
+                            .parent(parent),
+                        );
                     }
                     _ => {}
                 },
@@ -607,8 +621,8 @@ impl XmlParser {
         if let Some(last) = open_elements.iter().last() {
             self.xml_tokens.push(
                 XmlToken::error("Mismatch between number of closing and opening elements".into())
-                    .position(self.xml_tokens[*last].position)
-                    .parent(self.xml_tokens[*last].parent),
+                    .position(self.xml_tokens[*last as usize].position)
+                    .parent(self.xml_tokens[*last as usize].parent),
             );
         }
     }

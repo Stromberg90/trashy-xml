@@ -2,9 +2,9 @@ use smartstring::alias::String;
 
 #[derive(PartialEq)]
 pub enum TokenKind {
-    KeyChar(usize),
-    Whitespace(usize, usize),
-    Text(usize, usize),
+    KeyChar(u32),
+    Whitespace(u32, u32),
+    Text(u32, u32),
 }
 
 #[derive(PartialEq, Debug)]
@@ -12,7 +12,7 @@ pub enum XmlKind {
     Comment(String),
     Attribute(String, String),
     InnerText(String),
-    OpenElement(String, usize),
+    OpenElement(String, u32),
     CloseElement(String),
     Error(String),
 }
@@ -42,7 +42,7 @@ impl XmlToken {
         }
     }
 
-    pub fn open_element(str: String, id: usize) -> XmlToken {
+    pub fn open_element(str: String, id: u32) -> XmlToken {
         XmlToken {
             kind: XmlKind::OpenElement(str, id),
             position: FilePosition::new(),
@@ -71,7 +71,7 @@ impl XmlToken {
         self
     }
 
-    pub fn parent(mut self, parent: Option<usize>) -> XmlToken {
+    pub fn parent(mut self, parent: Option<u32>) -> XmlToken {
         self.parent = parent;
         self
     }
@@ -100,46 +100,56 @@ impl XmlToken {
         matches!(self.kind, XmlKind::Error(..))
     }
 
-    pub fn as_attribute_unchecked(&self) -> (&str, &str) {
+    pub unsafe fn as_attribute_unchecked(&self) -> (&str, &str) {
+        use std::hint::unreachable_unchecked;
+
         match &self.kind {
             XmlKind::Attribute(k, v) => (k, v),
-            _ => unreachable!(),
+            _ => unreachable_unchecked(),
         }
     }
 
-    pub fn as_comment_unchecked(&self) -> &str {
+    pub unsafe fn as_comment_unchecked(&self) -> &str {
+        use std::hint::unreachable_unchecked;
+
         match &self.kind {
             XmlKind::Comment(comment) => comment,
-            _ => unreachable!(),
+            _ => unreachable_unchecked(),
         }
     }
 
-    pub fn as_inner_text_unchecked(&self) -> &str {
+    pub unsafe fn as_inner_text_unchecked(&self) -> &str {
+        use std::hint::unreachable_unchecked;
+
         match &self.kind {
             XmlKind::InnerText(inner_text) => inner_text,
-            _ => unreachable!(),
+            _ => unreachable_unchecked(),
         }
     }
 
-    pub fn as_open_element_unchecked(&self) -> (&str, usize) {
+    pub unsafe fn as_open_element_unchecked(&self) -> (&str, u32) {
+        use std::hint::unreachable_unchecked;
+
         match &self.kind {
             XmlKind::OpenElement(k, v) => (k, *v),
-            _ => unreachable!(),
+            _ => unreachable_unchecked(),
         }
     }
 
-    pub fn as_close_element_unchecked(&self) -> &str {
+    pub unsafe fn as_close_element_unchecked(&self) -> &str {
+        use std::hint::unreachable_unchecked;
+
         match &self.kind {
             XmlKind::CloseElement(k) => k,
-            _ => unreachable!(),
+            _ => unreachable_unchecked(),
         }
     }
 }
 
 #[derive(PartialEq, Copy, Clone)]
 pub struct FilePosition {
-    pub line: usize,
-    pub column: usize,
+    pub line: u32,
+    pub column: u32,
 }
 
 impl FilePosition {
@@ -157,7 +167,7 @@ pub struct Token {
 pub struct XmlToken {
     pub position: FilePosition,
     pub kind: XmlKind,
-    pub parent: Option<usize>,
+    pub parent: Option<u32>,
 }
 
 pub struct RawTokens {

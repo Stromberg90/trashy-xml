@@ -1,18 +1,19 @@
 use super::*;
 
-#[inline(always)]
 pub fn peek(xml_parser: &XmlParser) -> Option<u8> {
-    xml_parser.buffer.get(xml_parser.index + 1).copied()
+    xml_parser
+        .buffer
+        .get((xml_parser.index + 1) as usize)
+        .copied()
 }
 
-#[inline(always)]
 pub fn next(xml_parser: &mut XmlParser) -> Option<u8> {
     if xml_parser.started_parsing {
         xml_parser.index += 1;
     } else {
         xml_parser.started_parsing = true;
     }
-    if let Some(character) = xml_parser.buffer.get(xml_parser.index).copied() {
+    if let Some(character) = xml_parser.buffer.get(xml_parser.index as usize).copied() {
         match character {
             b'\r' => {
                 if let Some(v) = peek(xml_parser) {
@@ -24,7 +25,7 @@ pub fn next(xml_parser: &mut XmlParser) -> Option<u8> {
                 }
             }
             b'\t' => {
-                xml_parser.position.column += xml_parser.settings.tab_width;
+                xml_parser.position.column += xml_parser.settings.tab_width as u32;
             }
             b'\n' => {
                 xml_parser.position.line += 1;
