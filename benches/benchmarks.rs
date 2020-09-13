@@ -8,7 +8,7 @@ fn small_file_attributes() -> usize {
     parser.parse();
     for token in &parser.xml_tokens {
         if let XmlKind::OpenElement(name, _) = &token.kind {
-            if name == "var_compond" {
+            if parser.str(name) == "var_compond" {
                 for _ in parser.attributes(token) {
                     result += 1;
                 }
@@ -32,7 +32,7 @@ fn medium_file_attributes() -> usize {
     parser.parse();
     for token in &parser.xml_tokens {
         if let XmlKind::OpenElement(name, _) = &token.kind {
-            if name == "Text" {
+            if parser.str(name) == "Text" {
                 for _ in parser.attributes(token) {
                     result += 1;
                 }

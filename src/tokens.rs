@@ -1,5 +1,29 @@
 use smartstring::alias::String;
 
+#[derive(Clone, PartialEq, Debug)]
+pub struct StringSpan {
+    start: u32,
+    end: u32,
+}
+
+impl StringSpan {
+    pub fn new(start: u32, end: u32) -> Self {
+        StringSpan { start, end }
+    }
+
+    pub fn start(&self) -> usize {
+        self.start as usize
+    }
+
+    pub fn end(&self) -> usize {
+        self.end as usize
+    }
+
+    pub fn length(&self) -> usize {
+        (self.end - self.start) as usize
+    }
+}
+
 #[derive(PartialEq)]
 pub enum TokenKind {
     KeyChar(u32),
@@ -9,16 +33,16 @@ pub enum TokenKind {
 
 #[derive(PartialEq, Debug)]
 pub enum XmlKind {
-    Comment(String),
-    Attribute(String, String),
-    InnerText(String),
-    OpenElement(String, u32),
-    CloseElement(String),
+    Comment(StringSpan),
+    Attribute(StringSpan, StringSpan),
+    InnerText(StringSpan),
+    OpenElement(StringSpan, u32),
+    CloseElement(StringSpan),
     Error(String),
 }
 
 impl XmlToken {
-    pub fn comment(str: String) -> XmlToken {
+    pub fn comment(str: StringSpan) -> XmlToken {
         XmlToken {
             kind: XmlKind::Comment(str),
             position: FilePosition::new(),
@@ -26,7 +50,7 @@ impl XmlToken {
         }
     }
 
-    pub fn attribute(name: String, value: String) -> XmlToken {
+    pub fn attribute(name: StringSpan, value: StringSpan) -> XmlToken {
         XmlToken {
             kind: XmlKind::Attribute(name, value),
             position: FilePosition::new(),
@@ -34,7 +58,7 @@ impl XmlToken {
         }
     }
 
-    pub fn inner_text(str: String) -> XmlToken {
+    pub fn inner_text(str: StringSpan) -> XmlToken {
         XmlToken {
             kind: XmlKind::InnerText(str),
             position: FilePosition::new(),
@@ -42,7 +66,7 @@ impl XmlToken {
         }
     }
 
-    pub fn open_element(str: String, id: u32) -> XmlToken {
+    pub fn open_element(str: StringSpan, id: u32) -> XmlToken {
         XmlToken {
             kind: XmlKind::OpenElement(str, id),
             position: FilePosition::new(),
@@ -50,7 +74,7 @@ impl XmlToken {
         }
     }
 
-    pub fn close_element(str: String) -> XmlToken {
+    pub fn close_element(str: StringSpan) -> XmlToken {
         XmlToken {
             kind: XmlKind::CloseElement(str),
             position: FilePosition::new(),
@@ -99,54 +123,9 @@ impl XmlToken {
     pub fn is_error(&self) -> bool {
         matches!(self.kind, XmlKind::Error(..))
     }
-
-    pub unsafe fn as_attribute_unchecked(&self) -> (&str, &str) {
-        use std::hint::unreachable_unchecked;
-
-        match &self.kind {
-            XmlKind::Attribute(k, v) => (k, v),
-            _ => unreachable_unchecked(),
-        }
-    }
-
-    pub unsafe fn as_comment_unchecked(&self) -> &str {
-        use std::hint::unreachable_unchecked;
-
-        match &self.kind {
-            XmlKind::Comment(comment) => comment,
-            _ => unreachable_unchecked(),
-        }
-    }
-
-    pub unsafe fn as_inner_text_unchecked(&self) -> &str {
-        use std::hint::unreachable_unchecked;
-
-        match &self.kind {
-            XmlKind::InnerText(inner_text) => inner_text,
-            _ => unreachable_unchecked(),
-        }
-    }
-
-    pub unsafe fn as_open_element_unchecked(&self) -> (&str, u32) {
-        use std::hint::unreachable_unchecked;
-
-        match &self.kind {
-            XmlKind::OpenElement(k, v) => (k, *v),
-            _ => unreachable_unchecked(),
-        }
-    }
-
-    pub unsafe fn as_close_element_unchecked(&self) -> &str {
-        use std::hint::unreachable_unchecked;
-
-        match &self.kind {
-            XmlKind::CloseElement(k) => k,
-            _ => unreachable_unchecked(),
-        }
-    }
 }
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 pub struct FilePosition {
     pub line: u32,
     pub column: u32,
@@ -163,7 +142,7 @@ pub struct Token {
     pub kind: TokenKind,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct XmlToken {
     pub position: FilePosition,
     pub kind: XmlKind,

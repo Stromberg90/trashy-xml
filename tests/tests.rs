@@ -125,7 +125,7 @@ fn small_file_attributes_len_check() {
     let mut number_of_errors = 0;
     for token in &parser.xml_tokens {
         if let XmlKind::OpenElement(name, _) = &token.kind {
-            if name == "var_compond" {
+            if parser.str(name) == "var_compond" {
                 for _ in parser.attributes(token) {
                     attributes_len += 1;
                 }

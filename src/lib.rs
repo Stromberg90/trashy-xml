@@ -10,7 +10,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use smartstring::alias::String;
-use tokens::{FilePosition, Token, XmlKind};
+use tokens::{FilePosition, StringSpan, Token, XmlKind};
 
 trait BytesToString {
     fn to_string(&self) -> String;
@@ -38,7 +38,7 @@ struct Settings {
 /// parser.parse();
 /// for token in &parser.xml_tokens {
 ///     if let XmlKind::OpenElement(name, _) = &token.kind {
-///         if name == "element" {
+///         if parser.str(name) == "element" {
 ///             for attribute in parser.attributes(token) {
 ///             }
 ///         }
@@ -276,6 +276,10 @@ impl XmlParser {
         result
     }
 
+    pub fn str(&self, span: &StringSpan) -> &str {
+        std::str::from_utf8(&self.buffer[span.start()..span.end()]).unwrap()
+    }
+
     pub fn parse(&mut self) {
         use TokenKind::*;
         use XmlKind::*;
@@ -371,10 +375,8 @@ impl XmlParser {
                                 }
                             }
                             let token = XmlToken::attribute(
-                                self.buffer[start_index as usize..end_index as usize].to_string(),
-                                self.buffer
-                                    [attribute_value_start as usize..attribute_value_end as usize]
-                                    .to_string(),
+                                StringSpan::new(start_index, end_index),
+                                StringSpan::new(attribute_value_start, attribute_value_end),
                             )
                             .position(raw_token.position)
                             .parent(parent);
@@ -420,12 +422,10 @@ impl XmlParser {
                                 self.raw_tokens.index += 1;
                             }
                             if !self.settings.ignore_comments {
-                                let token = XmlToken::comment(
-                                    self.buffer[comment_start as usize..comment_end as usize]
-                                        .to_string(),
-                                )
-                                .position(position)
-                                .parent(parent);
+                                let token =
+                                    XmlToken::comment(StringSpan::new(comment_start, comment_end))
+                                        .position(position)
+                                        .parent(parent);
                                 self.xml_tokens.push(token);
                             }
                         } else if let Some(raw_token) =
@@ -435,8 +435,7 @@ impl XmlParser {
                             match raw_token.kind {
                                 Text(start_index, end_index) => {
                                     let token = XmlToken::open_element(
-                                        self.buffer[start_index as usize..end_index as usize]
-                                            .to_string(),
+                                        StringSpan::new(start_index, end_index),
                                         self.xml_tokens.len() as u32,
                                     )
                                     .position(position)
@@ -459,20 +458,20 @@ impl XmlParser {
                                                         let text = self.buffer[start_index as usize
                                                             ..end_index as usize]
                                                             .to_string();
-                                                        if *index != front as u32 || name != &text {
-                                                            self.xml_tokens.push(
-                                                                XmlToken::error(format!("Mismatch between closing {} and opening {} elements", text, name).into())
-                                                                .position(position)
-                                                                .parent(parent));
+                                                        if *index != front as u32
+                                                            || self.str(name) != &text
+                                                        {
+                                                            let token = XmlToken::error(format!("Mismatch between closing {} and opening {} elements", text, self.str(name)).into())
+                                                            .position(position)
+                                                            .parent(parent);
+                                                            self.xml_tokens.push(token);
                                                         }
                                                     }
                                                 } else {
                                                     self.xml_tokens.push(XmlToken::error("Mismatch between closing and opening elements".into()).position(position).parent(parent));
                                                 }
                                                 let token = XmlToken::close_element(
-                                                    self.buffer
-                                                        [start_index as usize..end_index as usize]
-                                                        .to_string(),
+                                                    StringSpan::new(start_index, end_index),
                                                 )
                                                 .position(position)
                                                 .parent(parent);
@@ -535,15 +534,9 @@ impl XmlParser {
                                                 [start_index as usize..end_index as usize]
                                                 .to_string();
                                             if text.as_str() == "xml" {
-                                                let element_name = format!(
-                                                    "?{}",
-                                                    self.buffer
-                                                        [start_index as usize..end_index as usize]
-                                                        .to_string()
-                                                );
                                                 let parent_index = self.xml_tokens.len() as u32;
                                                 let token = XmlToken::open_element(
-                                                    element_name.into(),
+                                                    StringSpan::new(start_index, end_index),
                                                     parent_index,
                                                 )
                                                 .position(position)
@@ -573,7 +566,7 @@ impl XmlParser {
                                 {
                                     let position =
                                         self.raw_tokens.tokens[self.raw_tokens.index].position;
-                                    let token = XmlToken::close_element(parent_name.to_owned())
+                                    let token = XmlToken::close_element(parent_name.clone())
                                         .position(position)
                                         .parent(parent);
                                     self.xml_tokens.push(token);
@@ -605,11 +598,9 @@ impl XmlParser {
                         }
 
                         self.xml_tokens.push(
-                            XmlToken::inner_text(
-                                self.buffer[text_start as usize..text_end as usize].to_string(),
-                            )
-                            .position(raw_token.position)
-                            .parent(parent),
+                            XmlToken::inner_text(StringSpan::new(text_start, text_end))
+                                .position(raw_token.position)
+                                .parent(parent),
                         );
                     }
                     _ => {}
