@@ -14,9 +14,6 @@ categories = ["parsing", "text-processing"]
 license = "MIT"
 include = ["src/lib.rs", "LICENSE", "README.md", "sample_files"]
 
-[dependencies]
-smartstring = "0.2.4"
-
 [dev-dependencies]
 proptest = "0.10.1"
 criterion = "0.3.3"

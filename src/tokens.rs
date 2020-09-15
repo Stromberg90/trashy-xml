@@ -1,5 +1,3 @@
-use smartstring::alias::String;
-
 #[derive(Clone, PartialEq, Debug)]
 pub struct StringSpan {
     start: u32,
@@ -82,9 +80,9 @@ impl XmlToken {
         }
     }
 
-    pub fn error(str: String) -> XmlToken {
+    pub fn error(str: impl Into<String>) -> XmlToken {
         XmlToken {
-            kind: XmlKind::Error(str),
+            kind: XmlKind::Error(str.into()),
             position: FilePosition::new(),
             parent: None,
         }

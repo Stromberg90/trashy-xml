@@ -9,7 +9,6 @@ use std::collections::VecDeque;
 use std::path::Path;
 use std::str::FromStr;
 
-use smartstring::alias::String;
 use tokens::{FilePosition, StringSpan, Token, XmlKind};
 
 trait BytesToString {
@@ -18,9 +17,7 @@ trait BytesToString {
 
 impl BytesToString for [u8] {
     fn to_string(&self) -> String {
-        std::string::String::from_utf8_lossy(self)
-            .to_string()
-            .into()
+        std::string::String::from_utf8_lossy(self).to_string()
     }
 }
 
@@ -294,8 +291,7 @@ impl XmlParser {
                     self.raw_tokens.index += 1;
                     if open_elements.is_empty() {
                         self.xml_tokens.push(
-                            XmlToken::error("Document is empty".into())
-                                .position(raw_token.position),
+                            XmlToken::error("Document is empty").position(raw_token.position),
                         );
                         continue;
                     }
@@ -309,14 +305,11 @@ impl XmlParser {
                             }
                             Text(..) => {
                                 self.xml_tokens.push(
-                                    XmlToken::error(
-                                        format!(
-                                            "Specification mandates value for attribute {}",
-                                            &self.buffer[start_index as usize..end_index as usize]
-                                                .to_string()
-                                        )
-                                        .into(),
-                                    )
+                                    XmlToken::error(format!(
+                                        "Specification mandates value for attribute {}",
+                                        &self.buffer[start_index as usize..end_index as usize]
+                                            .to_string()
+                                    ))
                                     .position(raw_token.position)
                                     .parent(parent),
                                 );
@@ -336,7 +329,7 @@ impl XmlParser {
                             }
                             Text(..) => {
                                 self.xml_tokens.push(
-                                    XmlToken::error("\" or \' expected".into())
+                                    XmlToken::error("\" or \' expected")
                                         .position(raw_token.position)
                                         .parent(parent),
                                 );
@@ -411,11 +404,9 @@ impl XmlParser {
                                     }
                                     if !self.settings.ignore_comments {
                                         self.xml_tokens.push(
-                                            XmlToken::error(
-                                                "-- is not permitted within comments".into(),
-                                            )
-                                            .position(position)
-                                            .parent(parent),
+                                            XmlToken::error("-- is not permitted within comments")
+                                                .position(position)
+                                                .parent(parent),
                                         );
                                     }
                                 }
@@ -461,14 +452,14 @@ impl XmlParser {
                                                         if *index != front as u32
                                                             || self.str(name) != &text
                                                         {
-                                                            let token = XmlToken::error(format!("Mismatch between closing {} and opening {} elements", text, self.str(name)).into())
+                                                            let token = XmlToken::error(format!("Mismatch between closing {} and opening {} elements", text, self.str(name)))
                                                             .position(position)
                                                             .parent(parent);
                                                             self.xml_tokens.push(token);
                                                         }
                                                     }
                                                 } else {
-                                                    self.xml_tokens.push(XmlToken::error("Mismatch between closing and opening elements".into()).position(position).parent(parent));
+                                                    self.xml_tokens.push(XmlToken::error("Mismatch between closing and opening elements").position(position).parent(parent));
                                                 }
                                                 let token = XmlToken::close_element(
                                                     StringSpan::new(start_index, end_index),
@@ -480,7 +471,7 @@ impl XmlParser {
                                                     >= self.raw_tokens.tokens.len()
                                                 {
                                                     self.xml_tokens.push(
-                                                        XmlToken::error("Expected '>'".into())
+                                                        XmlToken::error("Expected '>'")
                                                             .position(position)
                                                             .parent(parent),
                                                     );
@@ -499,20 +490,20 @@ impl XmlParser {
                                                     KeyChar(index) => {
                                                         if self.buffer[index as usize] != b'>' {
                                                             self.xml_tokens.push(
-                                                                XmlToken::error(
-                                                                    "Expected '>'".into(),
-                                                                )
-                                                                .position(position)
-                                                                .parent(
-                                                                    open_elements.front().copied(),
-                                                                ),
+                                                                XmlToken::error("Expected '>'")
+                                                                    .position(position)
+                                                                    .parent(
+                                                                        open_elements
+                                                                            .front()
+                                                                            .copied(),
+                                                                    ),
                                                             );
                                                             self.raw_tokens.index += 1;
                                                         }
                                                     }
                                                     _ => {
                                                         self.xml_tokens.push(
-                                                            XmlToken::error("Expected '>'".into())
+                                                            XmlToken::error("Expected '>'")
                                                                 .position(position)
                                                                 .parent(parent),
                                                         );
@@ -546,7 +537,7 @@ impl XmlParser {
                                             }
                                         } else {
                                             self.xml_tokens.push(
-                                                XmlToken::error("Expected 'xml'".into())
+                                                XmlToken::error("Expected 'xml'")
                                                     .position(position)
                                                     .parent(parent),
                                             );
@@ -611,7 +602,7 @@ impl XmlParser {
         }
         if let Some(last) = open_elements.iter().last() {
             self.xml_tokens.push(
-                XmlToken::error("Mismatch between number of closing and opening elements".into())
+                XmlToken::error("Mismatch between number of closing and opening elements")
                     .position(self.xml_tokens[*last as usize].position)
                     .parent(self.xml_tokens[*last as usize].parent),
             );
