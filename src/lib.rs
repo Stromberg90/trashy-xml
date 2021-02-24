@@ -23,11 +23,6 @@ pub struct XmlParser {
     return_state: Option<XmlState>,
 }
 
-enum EmittedToken {
-    Character(char),
-    EOF,
-}
-
 impl XmlParser {
     pub fn parse() {
         // When a state says to reconsume a matched character in a specified state,
@@ -42,26 +37,17 @@ impl XmlParser {
             state: XmlState::Data(stream.next()),
             return_state: None,
         };
-        let mut emitted_tokens: VecDeque<EmittedToken> = VecDeque::new();
+        let mut emitted_tokens: VecDeque<char> = VecDeque::new();
         while parser.state != XmlState::EOF {
             match parser.state {
                 XmlState::Data(c) => match c {
                     Some(c) => {
                         if c == '<' {
-                            if let Some(token) = emitted_tokens.pop_back() {
-                                match token {
-                                    EmittedToken::Character(c) => {
-                                        parser.state = XmlState::TagOpen(Some(c));
-                                    }
-                                    EmittedToken::EOF => {
-                                        parser.state = XmlState::EOF;
-                                    }
-                                }
-                            } else {
-                                parser.state = XmlState::TagOpen(stream.next());
-                            }
+                            parser.state =
+                                XmlState::TagOpen(emitted_tokens.pop_back().or(stream.next()));
                         } else {
-                            parser.state = XmlState::Data(Some(c));
+                            parser.state =
+                                XmlState::Data(emitted_tokens.pop_back().or(stream.next()));
                         }
                     }
                     None => parser.state = XmlState::EOF,
@@ -83,36 +69,25 @@ impl XmlParser {
                             parser.state = XmlState::BogusComment(Some(c));
                         } else {
                             eprintln!("invalid-first-character-of-tag-name");
-                            emitted_tokens.push_back(EmittedToken::Character('<'));
-                            if let Some(token) = emitted_tokens.pop_back() {
-                                match token {
-                                    EmittedToken::Character(c) => {
-                                        parser.state = XmlState::Data(Some(c));
-                                    }
-                                    EmittedToken::EOF => {
-                                        parser.state = XmlState::EOF;
-                                    }
-                                }
-                            }
+                            emitted_tokens.push_back('<');
+                            parser.state =
+                                XmlState::Data(emitted_tokens.pop_back().or(stream.next()));
                         }
                     }
                     None => {
                         eprintln!("eof-before-tag-name");
-                        emitted_tokens.push_back(EmittedToken::Character('<'));
+                        emitted_tokens.push_back('<');
                         parser.state = XmlState::EOF;
                     }
                 },
                 XmlState::TagName(c) => match c {
                     Some(c) => {
                         if c == '>' {
-                            // Switch to the data state. Emit the current tag token.
-                            // what does emit really mean? like put it on the stack or something?
-                            parser.state = XmlState::Data(stream.next());
+                            parser.state =
+                                XmlState::Data(emitted_tokens.pop_back().or(stream.next()));
                         } else {
-                            // Append the current input character to the current tag token's tag name.
-                            todo!();
-                            // parser.state =
-                            // XmlState::TagName(emitted_tokens.pop_back().or(stream.next()));
+                            parser.state =
+                                XmlState::TagName(emitted_tokens.pop_back().or(stream.next()));
                         }
                     }
                     None => {
