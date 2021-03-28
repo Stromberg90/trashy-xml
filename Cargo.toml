@@ -24,5 +24,6 @@ proptest = "1.0.0"
 criterion = "0.3.4"
 
 [[bench]]
+path = "benches/benchmarks.rs"
 name = "benchmarks"
 harness = false
