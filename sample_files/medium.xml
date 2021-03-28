@@ -5065,5 +5065,5 @@
     <inside value="10" two="2"/>
     <inside value="10" />
     <inside value="10" two="2"/>
-    <inner funk="true">
+    <inner funk="true"/>
 </med>

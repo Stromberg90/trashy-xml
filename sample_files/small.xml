@@ -2,7 +2,8 @@
 	<!--<unit> -<<<>>>- -->
 <sequence_manager>
 	<unit>
-			<variables knob="slob" ><vassangutane hej = "ja" bob='Well Then'/>
+			<variables knob="slob" ><vassangutane hej 
+			= "ja" bob='Well Then'/>
 				<var_compond val = "0" bob='Well Then' spud="'man'"/>
 				<snake speedo="falsee">>Are you me or you?</snake > aa
 		<!--<smeg - -->
