@@ -246,6 +246,28 @@ fn token_from_position() {
     );
 }
 
+#[test]
+fn invalid_attributes() {
+    let parsed = XmlParser::str_with_settings(
+        r#"
+<a>
+    <body  en="wd<aw" />
+</a>    
+    "#,
+        Settings {
+            ignore_comments: true,
+            create_position_map: true,
+        },
+    )
+    .parse();
+    assert_eq!(
+        parsed.elements_from_name("body")[0].attributes_from_name("en")[0]
+            .key
+            .1,
+        FilePosition { line: 3, column: 12 }
+    );
+}
+
 proptest! {
     #[test]
     fn doesnt_crash_01(s in "<\\PC* \\PC*=\"\\PC*\">\n</\\PC*>") {

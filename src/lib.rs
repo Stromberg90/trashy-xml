@@ -167,10 +167,10 @@ impl<'a> ParsedXml<'a> {
                     p,
                 ));
             }
-            XmlError::Unescaped(c, s, p, pa) => {
+            XmlError::Unescaped(c, s, p, pa, ep) => {
                 self.errors.push(FmtXmlError::new(
                     format!("Unescaped {} not allowed in attribute values", c),
-                    p,
+                    ep,
                 ));
                 let token = XmlToken::invalid_attribute(
                     s,
@@ -584,10 +584,11 @@ impl<'a> XmlParser {
             let parent = open_elements.front().copied();
             match &raw_token.kind {
                 Text(text) => {
+                    let key_token = raw_token;
                     self.raw_index += 1;
                     if open_elements.is_empty() {
                         parsed_xml.push_error(
-                            XmlError::EmptyDocument(raw_token.position),
+                            XmlError::EmptyDocument(key_token.position),
                             &self.settings,
                         );
                         continue;
@@ -603,7 +604,7 @@ impl<'a> XmlParser {
                                 parsed_xml.push_error(
                                     XmlError::MissingValue(
                                         tokenizer.strings.get(*text).to_string(),
-                                        token.position,
+                                        key_token.position,
                                         parent,
                                     ),
                                     &self.settings,
@@ -624,7 +625,7 @@ impl<'a> XmlParser {
                                         parsed_xml.push_error(
                                             XmlError::QuoteExpected(
                                                 tokenizer.strings.get(*text).to_string(),
-                                                token.position,
+                                                key_token.position,
                                                 parent,
                                             ),
                                             &self.settings,
@@ -637,7 +638,7 @@ impl<'a> XmlParser {
                                 parsed_xml.push_error(
                                     XmlError::QuoteExpected(
                                         tokenizer.strings.get(*text).to_string(),
-                                        token.position,
+                                        key_token.position,
                                         parent,
                                     ),
                                     &self.settings,
@@ -664,12 +665,13 @@ impl<'a> XmlParser {
                                                     tokenizer.strings.get(*text).to_string(),
                                                     raw_token.position,
                                                     parent,
+                                                    token.position,
                                                 ),
                                                 &self.settings,
                                             );
                                             continue 'outer;
                                         } else if *key_char_index == boundary_character {
-                                            let token = XmlToken::attribute(
+                                            let attribute = XmlToken::attribute(
                                                 tokenizer.strings.get(*text),
                                                 value,
                                                 raw_token.position,
@@ -679,12 +681,11 @@ impl<'a> XmlParser {
                                                 }),
                                             );
                                             parsed_xml.push_attribute(
-                                                token,
+                                                attribute,
                                                 parent,
                                                 &self.settings,
                                             );
                                             found_boundary = true;
-                                            // has to be followed by text, > or />
                                             let mut offset = 2;
                                             while let Some(token) =
                                                 self.raw_tokens.get(self.raw_index + offset)

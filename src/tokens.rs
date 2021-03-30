@@ -176,7 +176,7 @@ pub(crate) enum XmlError {
     NotPermittedInComments(FilePosition),
     OpenCloseElementsMismatch(FilePosition),
     OpenCloseElementMismatch(String, String, FilePosition),
-    Unescaped(char, String, FilePosition, Option<usize>),
+    Unescaped(char, String, FilePosition, Option<usize>, FilePosition),
     MissingValue(String, FilePosition, Option<usize>),
     QuoteExpected(String, FilePosition, Option<usize>),
 }

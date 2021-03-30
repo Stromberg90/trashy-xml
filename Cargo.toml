@@ -1,6 +1,6 @@
 [package]
 name = "trashy-xml"
-version = "0.10.0"
+version = "0.10.1"
 authors = ["Andreas Strømberg<andreas.stromberg90@gmail.com>"]
 description = "Xml parser that does not stop parsing when encountering errors."
 edition = "2018"
