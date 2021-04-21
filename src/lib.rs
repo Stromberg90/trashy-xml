@@ -95,6 +95,7 @@ pub struct ParsedXml<'a> {
     open_elements: FxHashMap<String, Vec<RefXmlToken<'a>>>,
     /// Vector with error tokens.
     pub errors: Vec<FmtXmlError>,
+    create_position_map: bool,
 }
 
 impl<'a> ParsedXml<'a> {
@@ -119,6 +120,7 @@ impl<'a> ParsedXml<'a> {
     }
 
     fn insert_into_map(&mut self, position: FilePosition, token: RefXmlToken<'a>, length: usize) {
+        assert!(self.create_position_map);
         if let Some(l) = self.token_map.get_mut(&position.line) {
             l.insert(
                 Range {
@@ -352,6 +354,7 @@ impl<'a> ParsedXml<'a> {
     }
 
     pub fn token_from_position(&self, position: FilePosition) -> Option<XmlToken<'a>> {
+        assert!(self.create_position_map);
         if let Some(line) = self.token_map.get(&position.line) {
             for (range, token) in line {
                 if range.contains(&position.column) {
@@ -578,7 +581,10 @@ impl<'a> XmlParser {
         self.raw_tokens = tokenizer.fill();
 
         let mut open_elements = VecDeque::<usize>::new();
-        let mut parsed_xml = ParsedXml::default();
+        let mut parsed_xml = ParsedXml {
+            create_position_map: self.settings.create_position_map,
+            ..Default::default()
+        };
 
         'outer: while let Some(raw_token) = self.raw_tokens.get(self.raw_index) {
             let parent = open_elements.front().copied();
