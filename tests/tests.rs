@@ -99,43 +99,36 @@ fn small_file_attributes_len_check() {
 }
 #[test]
 fn no_hang_01() {
-    let parser = XmlParser::str(r#"`\"⽣ቋ<¥Ⱥ$+𛲜䒓ჇN&=១వ**À \"¥𐊣{¥ ""#);
-    parser.parse();
+    let _ = XmlParser::str(r#"`\"⽣ቋ<¥Ⱥ$+𛲜䒓ჇN&=១వ**À \"¥𐊣{¥ ""#).parse();
 }
 #[test]
 fn no_hang_02() {
-    let parser = XmlParser::str(r#"?$i૧<ᮙ8\'\\9×g🩺ౚ᭖῁𝈄𒂳🕴*ᣍኾ?$fY    \\𑴃 \"%¥Z""#);
-    parser.parse();
+    let _ = XmlParser::str(r#"?$i૧<ᮙ8\'\\9×g🩺ౚ᭖῁𝈄𒂳🕴*ᣍኾ?$fY    \\𑴃 \"%¥Z""#).parse();
 }
 
 #[test]
 fn fixed_index_out_of_bounds_crash_01() {
-    let parser = XmlParser::str(r#"<A=🌀=a"#);
-    parser.parse();
+    let _ = XmlParser::str(r#"<A=🌀=a"#).parse();
 }
 
 #[test]
 fn fixed_index_out_of_bounds_crash_02() {
-    let parser = XmlParser::str(r#"<Ⱥ\'`=<Ô"#);
-    parser.parse();
+    let _ = XmlParser::str(r#"<Ⱥ\'`=<Ô"#).parse();
 }
 
 #[test]
 fn fixed_index_out_of_bounds_crash_03() {
-    let parser = XmlParser::str(r#"<\u{fe00} #=\"0"#);
-    parser.parse();
+    let _ = XmlParser::str(r#"<\u{fe00} #=\"0"#).parse();
 }
 
 #[test]
 fn fixed_index_out_of_bounds_crash_04() {
-    let parser = XmlParser::str(r#"<?"#);
-    parser.parse();
+    let _ = XmlParser::str(r#"<?"#).parse();
 }
 
 #[test]
 fn empty_string() {
-    let parser = XmlParser::str("");
-    parser.parse();
+    let _ = XmlParser::str("").parse();
 }
 
 #[test]
@@ -252,7 +245,7 @@ fn invalid_attributes() {
         r#"
 <a>
     <body  en="wd<aw" />
-</a>    
+</a>
     "#,
         Settings {
             ignore_comments: true,
@@ -264,20 +257,21 @@ fn invalid_attributes() {
         parsed.elements_from_name("body")[0].attributes_from_name("en")[0]
             .key
             .1,
-        FilePosition { line: 3, column: 12 }
+        FilePosition {
+            line: 3,
+            column: 12
+        }
     );
 }
 
 proptest! {
     #[test]
     fn doesnt_crash_01(s in "<\\PC* \\PC*=\"\\PC*\">\n</\\PC*>") {
-        let parser = XmlParser::str(&s);
-        parser.parse();
+        let _ = XmlParser::str(&s).parse();
     }
 
     #[test]
     fn doesnt_crash_02(s in "\\PC*") {
-        let parser = XmlParser::str(&s);
-        parser.parse();
+        let _ = XmlParser::str(&s).parse();
     }
 }

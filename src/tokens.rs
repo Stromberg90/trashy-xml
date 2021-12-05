@@ -20,7 +20,7 @@ pub(crate) enum TokenKind {
     Whitespace(usize),
 }
 
-/// Comment added only if ignore_comments is set to false.
+/// Comment added only if `ignore_comments` is set to false.
 #[derive(Clone, Debug)]
 pub struct Comment {
     pub string: String,
@@ -41,7 +41,7 @@ impl<'a> fmt::Debug for Attribute<'a> {
             "Key: {}\n{:#?}\nValue: {}\n{:#?}",
             self.key.0,
             self.key.1,
-            self.value.as_ref().unwrap_or(&("".into(), self.key.1,)).0,
+            self.value.as_ref().unwrap_or(&("".into(), self.key.1)).0,
             self.value.as_ref().unwrap_or(&self.key).1
         )
     }
@@ -62,8 +62,7 @@ impl<'a> Family<'a> for XmlToken<'a> {
         self.parent()
             .as_ref()
             .map(|p| {
-                p.clone()
-                    .as_open_element()
+                p.as_open_element()
                     .children()
                     .into_iter()
                     .filter(|v| v != self)
@@ -83,7 +82,6 @@ impl<'a> Family<'a> for Attribute<'a> {
             .as_ref()
             .map(|p| {
                 p.borrow()
-                    .clone()
                     .as_open_element()
                     .children()
                     .into_iter()
@@ -126,6 +124,7 @@ impl<'a> fmt::Debug for OpenElement<'a> {
 }
 
 impl<'a> OpenElement<'a> {
+    #[must_use]
     pub fn attributes_from_name(&self, name: &str) -> Vec<Attribute<'a>> {
         self.attributes
             .get(name)
@@ -135,6 +134,7 @@ impl<'a> OpenElement<'a> {
             .collect::<Vec<_>>()
     }
 
+    #[must_use]
     pub fn attributes(&self) -> Vec<Attribute<'a>> {
         self.attributes
             .values()
@@ -144,6 +144,7 @@ impl<'a> OpenElement<'a> {
             .collect()
     }
 
+    #[must_use]
     pub fn children(&self) -> Vec<XmlToken<'a>> {
         self.children
             .iter()
@@ -344,26 +345,32 @@ impl<'a> XmlToken<'a> {
         })
     }
 
+    #[must_use]
     pub fn is_comment(&self) -> bool {
         matches!(self, XmlToken::Comment(..))
     }
 
+    #[must_use]
     pub fn is_attribute(&self) -> bool {
         matches!(self, XmlToken::Attribute(..))
     }
 
+    #[must_use]
     pub fn is_inner_text(&self) -> bool {
         matches!(self, XmlToken::InnerText(..))
     }
 
+    #[must_use]
     pub fn is_open_element(&self) -> bool {
         matches!(self, XmlToken::OpenElement(..))
     }
 
+    #[must_use]
     pub fn is_close_element(&self) -> bool {
         matches!(self, XmlToken::CloseElement(..))
     }
 
+    #[must_use]
     pub fn as_comment(&self) -> &Comment {
         match self {
             XmlToken::Comment(v) => v,
@@ -371,6 +378,7 @@ impl<'a> XmlToken<'a> {
         }
     }
 
+    #[must_use]
     pub fn as_attribute(&self) -> &Attribute<'a> {
         match self {
             XmlToken::Attribute(v) => v,
@@ -378,6 +386,7 @@ impl<'a> XmlToken<'a> {
         }
     }
 
+    #[must_use]
     pub fn as_inner_text(&self) -> &InnerText<'a> {
         match self {
             XmlToken::InnerText(v) => v,
@@ -385,6 +394,7 @@ impl<'a> XmlToken<'a> {
         }
     }
 
+    #[must_use]
     pub fn as_open_element(&self) -> &OpenElement<'a> {
         match self {
             XmlToken::OpenElement(v) => v,
@@ -392,6 +402,7 @@ impl<'a> XmlToken<'a> {
         }
     }
 
+    #[must_use]
     pub fn as_close_element(&self) -> &CloseElement<'a> {
         match self {
             XmlToken::CloseElement(v) => v,
@@ -399,6 +410,7 @@ impl<'a> XmlToken<'a> {
         }
     }
 
+    #[must_use]
     pub(crate) fn as_mut_open_element(&mut self) -> &mut OpenElement<'a> {
         match self {
             XmlToken::OpenElement(v) => v,
@@ -406,6 +418,7 @@ impl<'a> XmlToken<'a> {
         }
     }
 
+    #[must_use]
     pub fn position(&self) -> FilePosition {
         match self {
             XmlToken::Comment(v) => v.position,
@@ -415,6 +428,10 @@ impl<'a> XmlToken<'a> {
             XmlToken::CloseElement(v) => v.position,
         }
     }
+}
+
+pub trait As {
+    
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
