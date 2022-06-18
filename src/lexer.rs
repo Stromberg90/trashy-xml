@@ -8,8 +8,7 @@ pub(crate) fn peek(buffer: &mut Peekable<Iter<'_, u8>>) -> Option<u8> {
 #[inline]
 pub(crate) fn next(tokenizer: &mut Tokenizer<'_>) -> Option<u8> {
     if let Some(character) = tokenizer.buffer.next().copied() {
-        if character == b'\r' && peek(&mut tokenizer.buffer) == Some(b'\n') {
-        } else {
+        if character != b'\r' || peek(&mut tokenizer.buffer) != Some(b'\n') {
             tokenizer.position.column += 1;
         }
         if character == b'\n' {

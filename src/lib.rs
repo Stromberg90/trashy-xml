@@ -601,20 +601,18 @@ impl<'a> XmlParser {
                     while let Some(token) = self.raw_tokens.get(self.raw_index) {
                         match token.kind {
                             KeyChar(kc) => {
-                                if KEY_CHARS[kc as usize] {
-                                    if kc == b'"' || kc == b'\'' {
-                                        break;
-                                    } else if kc != b'=' {
-                                        parsed_xml.push_error(
-                                            XmlError::QuoteExpected(
-                                                tokenizer.strings.get(*text).to_string(),
-                                                key_token.position,
-                                                parent,
-                                            ),
-                                            &self.settings,
-                                        );
-                                        continue 'outer;
-                                    }
+                                if kc == b'"' || kc == b'\'' {
+                                    break;
+                                } else if kc != b'=' {
+                                    parsed_xml.push_error(
+                                        XmlError::QuoteExpected(
+                                            tokenizer.strings.get(*text).to_string(),
+                                            key_token.position,
+                                            parent,
+                                        ),
+                                        &self.settings,
+                                    );
+                                    continue 'outer;
                                 }
                             }
                             Text(..) => {

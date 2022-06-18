@@ -3,7 +3,7 @@ name = "trashy-xml"
 version = "0.12.0"
 authors = ["Andreas Strømberg<andreas.stromberg90@gmail.com>"]
 description = "Xml parser that does not stop parsing when encountering errors."
-edition = "2018"
+edition = "2021"
 
 documentation = "https://docs.rs/trashy-xml"
 repository = "https://github.com/Stromberg90/trashy-xml"
@@ -12,11 +12,17 @@ readme = "README.md"
 keywords = ["xml", "parser"]
 categories = ["parsing", "text-processing"]
 license = "MIT"
-include = ["src/lib.rs", "src/tokens.rs", "src/lexer.rs", "LICENSE", "README.md"]
+include = [
+    "src/lib.rs",
+    "src/tokens.rs",
+    "src/lexer.rs",
+    "LICENSE",
+    "README.md",
+]
 
 [dependencies]
 rustc-hash = "1.1.0"
-mimalloc = "0.1.26"
+mimalloc = "0.1.28"
 lazy_static = "1.4.0"
 
 [dev-dependencies]
