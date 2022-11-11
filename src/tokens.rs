@@ -41,7 +41,10 @@ impl<'a> fmt::Debug for Attribute<'a> {
             "Key: {}\n{:#?}\nValue: {}\n{:#?}",
             self.key.0,
             self.key.1,
-            self.value.as_ref().unwrap_or(&("".into(), self.key.1)).0,
+            self.value
+                .as_ref()
+                .unwrap_or(&(String::new(), self.key.1))
+                .0,
             self.value.as_ref().unwrap_or(&self.key).1
         )
     }
@@ -430,9 +433,7 @@ impl<'a> XmlToken<'a> {
     }
 }
 
-pub trait As {
-    
-}
+pub trait As {}
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 /// Position in the source file or string.

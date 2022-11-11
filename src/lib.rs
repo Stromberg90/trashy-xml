@@ -12,12 +12,10 @@
 //! }
 //! ```
 
-#![warn(
-    missing_debug_implementations,
-    rust_2018_idioms,
-    rustdoc::missing_doc_code_examples
-)]
+#![warn(missing_debug_implementations, rust_2018_idioms)]
 
+use fnv::FnvBuildHasher;
+use indexmap::IndexSet;
 use lazy_static::lazy_static;
 use mimalloc::MiMalloc;
 
@@ -32,8 +30,8 @@ use crate::tokens::{TokenKind, XmlToken};
 use rustc_hash::FxHashMap;
 use std::ops::Range;
 use std::{
-    borrow::Cow, cell::RefCell, collections::VecDeque, iter::Peekable, path::Path, rc::Rc,
-    slice::Iter, str, string::String,
+    cell::RefCell, collections::VecDeque, iter::Peekable, path::Path, rc::Rc, slice::Iter, str,
+    string::String,
 };
 
 use tokens::{FilePosition, OpenElement, Token, XmlError};
@@ -126,8 +124,8 @@ impl<'a> ParsedXml<'a> {
         if let Some(l) = self.token_map.get_mut(&position.line) {
             l.insert(
                 Range {
-                    start: position.column as usize,
-                    end: position.column as usize + length + 1,
+                    start: position.column,
+                    end: position.column + length + 1,
                 },
                 token,
             );
@@ -136,7 +134,7 @@ impl<'a> ParsedXml<'a> {
             self.token_map.get_mut(&position.line).unwrap().insert(
                 Range {
                     start: position.column,
-                    end: position.column as usize + length + 1,
+                    end: position.column + length + 1,
                 },
                 token,
             );
@@ -259,15 +257,15 @@ impl<'a> ParsedXml<'a> {
         {
             let token_borrowed = token.borrow();
             let attribute = token_borrowed.as_attribute();
-            if let Some(parent) = parent {
-                if let Some(p) = self.tokens.get_mut(parent) {
-                    let mut p_token = p.borrow_mut();
-                    p_token.as_mut_open_element().children.push(token.clone());
-                }
-            }
-            if let Some(parent) = parent {
-                if let Some(p) = self.tokens.get_mut(parent) {
-                    let mut attributes = p.borrow_mut();
+            if let Some(parent_index) = parent {
+                if let Some(parent) = self.tokens.get_mut(parent_index) {
+                    parent
+                        .borrow_mut()
+                        .as_mut_open_element()
+                        .children
+                        .push(token.clone());
+
+                    let mut attributes = parent.borrow_mut();
                     if let Some(attrs) = attributes
                         .as_mut_open_element()
                         .attributes
@@ -282,31 +280,36 @@ impl<'a> ParsedXml<'a> {
                     }
                 }
             }
+
             if settings.create_position_map {
                 self.insert_into_map(attribute.key.1, token.clone(), attribute.key.0.len());
-                if let Some(value) = &attribute.value {
-                    self.insert_into_map(value.1, token.clone(), value.0.len());
+                if let Some((value, position)) = &attribute.value {
+                    self.insert_into_map(*position, token.clone(), value.len());
                 } else {
                     self.insert_into_map(attribute.key.1, token.clone(), 1);
                 }
             }
         }
+
         self.tokens.push(token);
     }
 
     fn push_comment(&mut self, token: XmlToken<'a>, parent: Option<usize>, settings: &Settings) {
         let token = new_rc_refcell(token);
         if !settings.ignore_comments {
-            if let Some(parent) = parent {
-                if let Some(p) = self.tokens.get_mut(parent) {
-                    let mut p_token = p.borrow_mut();
-                    p_token.as_mut_open_element().children.push(token.clone());
+            if let Some(parent_index) = parent {
+                if let Some(parent) = self.tokens.get_mut(parent_index) {
+                    let mut borrowed_parent = parent.borrow_mut();
+                    borrowed_parent
+                        .as_mut_open_element()
+                        .children
+                        .push(token.clone());
                 }
             }
             if settings.create_position_map {
-                let t = token.borrow();
-                let t = t.as_comment();
-                self.insert_into_map(t.position, token.clone(), t.string.len());
+                let borrowed_token = token.borrow();
+                let comment = borrowed_token.as_comment();
+                self.insert_into_map(comment.position, token.clone(), comment.string.len());
             }
         }
         self.tokens.push(token);
@@ -366,42 +369,9 @@ fn new_rc_refcell<T>(t: T) -> Rc<RefCell<T>> {
     Rc::new(RefCell::new(t))
 }
 
-#[derive(Debug)]
-struct Strings {
-    strings: Vec<String>,
-    map: FxHashMap<String, usize>,
-}
-
-impl Default for Strings {
-    fn default() -> Self {
-        Self {
-            strings: Vec::with_capacity(32),
-            map: FxHashMap::default(),
-        }
-    }
-}
-
-impl Strings {
-    fn get_index_or_insert(&mut self, string: &str) -> usize {
-        if let Some(a) = self.map.get(string) {
-            *a
-        } else {
-            let index = self.strings.len();
-            self.map.insert(string.to_string(), self.strings.len());
-            self.strings.push(string.to_string());
-            index
-        }
-    }
-
-    #[inline]
-    fn get(&self, index: usize) -> Cow<'_, str> {
-        Cow::Borrowed(&self.strings[index])
-    }
-}
-
 struct Tokenizer<'a> {
     position: FilePosition,
-    strings: Strings,
+    strings: IndexSet<String, FnvBuildHasher>,
     buffer: Peekable<Iter<'a, u8>>,
 }
 
@@ -424,7 +394,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                 while lexer::peek(&mut self.buffer)?.is_ascii_whitespace() {
                     text.push(lexer::next(self)? as char);
                 }
-                let string_index = self.strings.get_index_or_insert(&text);
+                let string_index = self.strings.insert_full(text).0;
                 return Some(Token {
                     position,
                     kind: TokenKind::Whitespace(string_index),
@@ -438,7 +408,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                     break;
                 }
             }
-            let string_index = self.strings.get_index_or_insert(&text);
+            let string_index = self.strings.insert_full(text).0;
             return Some(Token {
                 position,
                 kind: TokenKind::Text(string_index),
@@ -449,6 +419,7 @@ impl<'a> Iterator for Tokenizer<'a> {
 }
 
 impl<'a> Tokenizer<'a> {
+    #[inline]
     fn fill(&mut self) -> Vec<Token> {
         self.collect()
     }
@@ -501,7 +472,7 @@ impl<'a> XmlParser {
     }
 
     #[inline]
-    fn char_match(t: &Token, c: u8, string_map: &[String]) -> bool {
+    fn char_match(t: &Token, c: u8, string_map: &IndexSet<String, FnvBuildHasher>) -> bool {
         match &t.kind {
             TokenKind::KeyChar(kc) => *kc == c,
             TokenKind::Text(s) => string_map[*s].as_bytes()[0] == c,
@@ -510,7 +481,11 @@ impl<'a> XmlParser {
     }
 
     #[inline]
-    fn match_next_str(&self, characters: &str, string_map: &[String]) -> (bool, usize) {
+    fn match_next_str(
+        &self,
+        characters: &str,
+        string_map: &IndexSet<String, FnvBuildHasher>,
+    ) -> (bool, usize) {
         let chars = characters.as_bytes();
         let chars_count = chars.len();
         if self.raw_index + chars_count < self.raw_tokens.len() {
@@ -527,7 +502,11 @@ impl<'a> XmlParser {
         (true, chars_count)
     }
 
-    fn match_next_char(&self, character: u8, string_map: &[String]) -> bool {
+    fn match_next_char(
+        &self,
+        character: u8,
+        string_map: &IndexSet<String, FnvBuildHasher>,
+    ) -> bool {
         if let Some(token) = self.raw_tokens.get(self.raw_index + 1) {
             match &token.kind {
                 TokenKind::KeyChar(kc) => {
@@ -553,7 +532,7 @@ impl<'a> XmlParser {
         let mut tokenizer = Tokenizer {
             position: FilePosition::default(),
             buffer: self.buffer.iter().peekable(),
-            strings: Strings::default(),
+            strings: IndexSet::default(),
         };
         self.raw_tokens = tokenizer.fill();
 
@@ -586,7 +565,7 @@ impl<'a> XmlParser {
                             Text(..) => {
                                 parsed_xml.push_error(
                                     XmlError::MissingValue(
-                                        tokenizer.strings.get(*text).to_string(),
+                                        tokenizer.strings.get_index(*text).unwrap().to_owned(),
                                         key_token.position,
                                         parent,
                                     ),
@@ -606,7 +585,7 @@ impl<'a> XmlParser {
                                 } else if kc != b'=' {
                                     parsed_xml.push_error(
                                         XmlError::QuoteExpected(
-                                            tokenizer.strings.get(*text).to_string(),
+                                            tokenizer.strings.get_index(*text).unwrap().to_owned(),
                                             key_token.position,
                                             parent,
                                         ),
@@ -618,7 +597,7 @@ impl<'a> XmlParser {
                             Text(..) => {
                                 parsed_xml.push_error(
                                     XmlError::QuoteExpected(
-                                        tokenizer.strings.get(*text).to_string(),
+                                        tokenizer.strings.get_index(*text).unwrap().to_owned(),
                                         key_token.position,
                                         parent,
                                     ),
@@ -643,7 +622,11 @@ impl<'a> XmlParser {
                                             parsed_xml.push_error(
                                                 XmlError::Unescaped(
                                                     '<',
-                                                    tokenizer.strings.get(*text).to_string(),
+                                                    tokenizer
+                                                        .strings
+                                                        .get_index(*text)
+                                                        .unwrap()
+                                                        .to_owned(),
                                                     raw_token.position,
                                                     parent,
                                                     token.position,
@@ -653,7 +636,11 @@ impl<'a> XmlParser {
                                             continue 'outer;
                                         } else if *key_char_index == boundary_character {
                                             let attribute = XmlToken::attribute(
-                                                tokenizer.strings.get(*text),
+                                                tokenizer
+                                                    .strings
+                                                    .get_index(*text)
+                                                    .unwrap()
+                                                    .to_owned(),
                                                 value,
                                                 raw_token.position,
                                                 attribute.position,
@@ -691,8 +678,9 @@ impl<'a> XmlParser {
                                                             XmlError::ElementMustBeFollowedBy(
                                                                 tokenizer
                                                                     .strings
-                                                                    .get(*text)
-                                                                    .to_string(),
+                                                                    .get_index(*text)
+                                                                    .unwrap()
+                                                                    .to_owned(),
                                                                 raw_token.position,
                                                             ),
                                                             &self.settings,
@@ -712,10 +700,12 @@ impl<'a> XmlParser {
                                         value.push(*key_char_index as char);
                                     }
                                     Text(text) => {
-                                        value.push_str(&tokenizer.strings.get(*text));
+                                        value.push_str(tokenizer.strings.get_index(*text).unwrap());
                                     }
                                     Whitespace(whitespace) => {
-                                        value.push_str(&tokenizer.strings.get(*whitespace));
+                                        value.push_str(
+                                            tokenizer.strings.get_index(*whitespace).unwrap(),
+                                        );
                                     }
                                 }
                                 self.raw_index += 1;
@@ -723,7 +713,7 @@ impl<'a> XmlParser {
                             if !found_boundary {
                                 parsed_xml.push_error(
                                     XmlError::QuoteExpected(
-                                        tokenizer.strings.get(*text).to_string(),
+                                        tokenizer.strings.get_index(*text).unwrap().to_owned(),
                                         raw_token.position,
                                         parent,
                                     ),
@@ -735,7 +725,7 @@ impl<'a> XmlParser {
                     } else {
                         parsed_xml.push_error(
                             XmlError::QuoteExpected(
-                                tokenizer.strings.get(*text).to_string(),
+                                tokenizer.strings.get_index(*text).unwrap().to_owned(),
                                 raw_token.position,
                                 parent,
                             ),
@@ -745,18 +735,16 @@ impl<'a> XmlParser {
                 }
                 KeyChar(kc) => match kc {
                     b'<' => {
-                        if let (true, char_num) =
-                            self.match_next_str("!--", &tokenizer.strings.strings)
-                        {
+                        if let (true, char_num) = self.match_next_str("!--", &tokenizer.strings) {
                             self.raw_index += char_num;
                             let position = self.raw_tokens[self.raw_index].position;
                             let mut comment = String::with_capacity(10);
                             while let Some(raw_token) = self.raw_tokens.get(self.raw_index + 1) {
                                 if let (true, ec_char_num) =
-                                    self.match_next_str("--", &tokenizer.strings.strings)
+                                    self.match_next_str("--", &tokenizer.strings)
                                 {
                                     self.raw_index += ec_char_num;
-                                    if self.match_next_char(b'>', &tokenizer.strings.strings) {
+                                    if self.match_next_char(b'>', &tokenizer.strings) {
                                         self.raw_index += 1;
                                         break;
                                     }
@@ -773,7 +761,9 @@ impl<'a> XmlParser {
                                             comment.push(*kc as char);
                                         }
                                         Text(text) | Whitespace(text) => {
-                                            comment.push_str(&tokenizer.strings.get(*text));
+                                            comment.push_str(
+                                                tokenizer.strings.get_index(*text).unwrap(),
+                                            );
                                         }
                                     }
                                 }
@@ -790,7 +780,7 @@ impl<'a> XmlParser {
                                 Text(name) => {
                                     let id = parsed_xml.tokens.len();
                                     let token = XmlToken::open_element(
-                                        tokenizer.strings.get(*name),
+                                        tokenizer.strings.get_index(*name).unwrap().to_owned(),
                                         id,
                                         position,
                                         parent.map(|p| parsed_xml.tokens[p].clone()),
@@ -817,14 +807,19 @@ impl<'a> XmlParser {
                                                         };
                                                     if let (Some(name), Some(id)) = (name, id) {
                                                         if id != front
-                                                            || name != tokenizer.strings.get(*text)
+                                                            || name
+                                                                != *tokenizer
+                                                                    .strings
+                                                                    .get_index(*text)
+                                                                    .unwrap()
                                                         {
                                                             parsed_xml.push_error(
                                                                 XmlError::OpenCloseElementMismatch(
                                                                     tokenizer
                                                                         .strings
-                                                                        .get(*text)
-                                                                        .to_string(),
+                                                                        .get_index(*text)
+                                                                        .unwrap()
+                                                                        .to_owned(),
                                                                     name,
                                                                     position,
                                                                 ),
@@ -841,7 +836,11 @@ impl<'a> XmlParser {
                                                     );
                                                 }
                                                 let token = XmlToken::close_element(
-                                                    tokenizer.strings.get(*text),
+                                                    tokenizer
+                                                        .strings
+                                                        .get_index(*text)
+                                                        .unwrap()
+                                                        .to_owned(),
                                                     position,
                                                     parent.map(|p| parsed_xml.tokens[p].clone()),
                                                 );
@@ -898,10 +897,15 @@ impl<'a> XmlParser {
                                         }
                                         let parent = open_elements.front().copied();
                                         if let Text(text) = &self.raw_tokens[self.raw_index].kind {
-                                            if tokenizer.strings.get(*text) == "xml" {
+                                            if *tokenizer.strings.get_index(*text).unwrap() == "xml"
+                                            {
                                                 let id = parsed_xml.tokens.len();
                                                 let token = XmlToken::open_element(
-                                                    tokenizer.strings.get(*text),
+                                                    tokenizer
+                                                        .strings
+                                                        .get_index(*text)
+                                                        .unwrap()
+                                                        .to_owned(),
                                                     id,
                                                     position,
                                                     parent.map(|p| parsed_xml.tokens[p].clone()),
@@ -926,7 +930,7 @@ impl<'a> XmlParser {
                         }
                     }
                     b'/' | b'?' => {
-                        if self.match_next_char(b'>', &tokenizer.strings.strings) {
+                        if self.match_next_char(b'>', &tokenizer.strings) {
                             open_elements.pop_front();
                             let position = self.raw_tokens[self.raw_index].position;
                             let token = XmlToken::close_element_quick(
@@ -941,7 +945,8 @@ impl<'a> XmlParser {
                         while let Some(raw_token) = self.raw_tokens.get(self.raw_index + 1) {
                             match &raw_token.kind {
                                 Text(text) | Whitespace(text) => {
-                                    inner_text.push_str(&tokenizer.strings.get(*text));
+                                    inner_text
+                                        .push_str(tokenizer.strings.get_index(*text).unwrap());
                                 }
                                 KeyChar(kc) => {
                                     if *kc == b'<' {
