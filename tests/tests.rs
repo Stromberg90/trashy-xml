@@ -15,7 +15,7 @@ fn small_file_len_check() {
     )
     .unwrap()
     .parse();
-    assert_eq!(parsed.elements().len(), 7);
+    assert_eq!(parsed.elements().count(), 7);
     assert_eq!(parsed.errors.len(), 0);
 }
 
@@ -90,7 +90,7 @@ fn small_file_attributes_len_check() {
     let mut attributes_len = 0;
     let parser = XmlParser::file("sample_files/small.xml").unwrap().parse();
     for token in parser.elements_from_name("var_compond") {
-        for _ in &token.attributes() {
+        for _ in token.attributes() {
             attributes_len += 1;
         }
     }
@@ -134,7 +134,7 @@ fn empty_string() {
 #[test]
 fn large_file_len_check() {
     let parser = XmlParser::file("sample_files/large.xml").unwrap().parse();
-    let total_elements = parser.elements().len();
+    let total_elements = parser.elements().count();
     assert_eq!(total_elements, 81841);
     assert_eq!(parser.errors.len(), 0);
 }
@@ -254,7 +254,13 @@ fn invalid_attributes() {
     )
     .parse();
     assert_eq!(
-        parsed.elements_from_name("body")[0].attributes_from_name("en")[0]
+        parsed
+            .elements_from_name("body")
+            .next()
+            .unwrap()
+            .attributes_from_name("en")
+            .next()
+            .unwrap()
             .key
             .1,
         FilePosition {

@@ -127,32 +127,23 @@ impl<'a> fmt::Debug for OpenElement<'a> {
 }
 
 impl<'a> OpenElement<'a> {
-    #[must_use]
-    pub fn attributes_from_name(&self, name: &str) -> Vec<Attribute<'a>> {
+    pub fn attributes_from_name(&self, name: &str) -> impl Iterator<Item = Attribute<'a>> + '_ {
         self.attributes
             .get(name)
-            .unwrap_or(&Vec::new())
-            .iter()
-            .map(|e| e.borrow().as_attribute().clone())
-            .collect::<Vec<_>>()
-    }
-
-    #[must_use]
-    pub fn attributes(&self) -> Vec<Attribute<'a>> {
-        self.attributes
-            .values()
+            .map(|attributes| attributes.iter().map(|e| e.borrow().as_attribute().clone()))
             .into_iter()
             .flatten()
-            .map(|e| e.borrow().as_attribute().clone())
-            .collect()
     }
 
-    #[must_use]
-    pub fn children(&self) -> Vec<XmlToken<'a>> {
-        self.children
-            .iter()
-            .map(|e| e.borrow().clone())
-            .collect::<Vec<_>>()
+    pub fn attributes(&self) -> impl Iterator<Item = Attribute<'a>> + '_ {
+        self.attributes
+            .values()
+            .flatten()
+            .map(|e| e.borrow().as_attribute().clone())
+    }
+
+    pub fn children(&self) -> impl Iterator<Item = XmlToken<'a>> + '_ {
+        self.children.iter().map(|e| e.borrow().clone())
     }
 }
 
@@ -248,16 +239,16 @@ impl<'a> XmlToken<'a> {
         })
     }
 
-    pub(crate) fn attribute<S, S2>(
-        key: S,
-        value: S2,
+    pub(crate) fn attribute<K, V>(
+        key: K,
+        value: V,
         key_position: FilePosition,
         value_position: FilePosition,
         parent: Option<RefXmlToken<'a>>,
     ) -> XmlToken<'a>
     where
-        S: Into<String>,
-        S2: Into<String>,
+        K: Into<String>,
+        V: Into<String>,
     {
         assert!({
             if key_position.line == value_position.line {

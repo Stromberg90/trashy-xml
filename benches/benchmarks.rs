@@ -6,7 +6,7 @@ fn small_file_attributes() -> usize {
     let mut result = 0;
     let parsed = XmlParser::file("sample_files/small.xml").unwrap().parse();
     for token in parsed.elements_from_name("var_compond") {
-        for _ in &token.attributes() {
+        for _ in token.attributes() {
             result += 1;
         }
     }
@@ -18,7 +18,7 @@ fn medium_file_attributes() -> usize {
     let mut result = 0;
     let parsed = XmlParser::file("sample_files/medium.xml").unwrap().parse();
     for token in parsed.elements_from_name("Text") {
-        for _ in &token.attributes() {
+        for _ in token.attributes() {
             result += 1;
         }
     }
@@ -28,7 +28,7 @@ fn medium_file_attributes() -> usize {
 fn large_file_token_length() -> usize {
     // quick-xml was at 9ms
     let parsed = XmlParser::file("sample_files/large.xml").unwrap().parse();
-    parsed.elements().len()
+    parsed.elements().count()
 }
 
 fn criterion_benchmark(c: &mut Criterion) {

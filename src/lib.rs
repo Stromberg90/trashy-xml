@@ -8,7 +8,7 @@
 //! // then prints the debug representation of its attributes.
 //! let parsed = XmlParser::str("<this_element attribute=\"value\" />").parse();
 //! for token in parsed.elements_from_name("this_element") {
-//!     dbg!(token.attributes());
+//!     dbg!(token.attributes().collect::<Vec<_>>());
 //! }
 //! ```
 
@@ -98,25 +98,25 @@ pub struct ParsedXml<'a> {
 
 impl<'a> ParsedXml<'a> {
     /// Takes a name and returns all open elements matching that name.
-    #[must_use]
-    pub fn elements_from_name(&self, name: &str) -> Vec<OpenElement<'a>> {
+    pub fn elements_from_name(&self, name: &str) -> impl Iterator<Item = OpenElement<'a>> + '_ {
         self.open_elements
             .get(name)
-            .unwrap_or(&Vec::new())
-            .iter()
-            .map(|e| e.borrow().as_open_element().clone())
-            .collect::<Vec<_>>()
+            .map(|elements| {
+                elements
+                    .iter()
+                    .map(|e| e.borrow().as_open_element().clone())
+            })
+            .into_iter()
+            .flatten()
     }
 
     /// Returns vector with all open elements.
-    #[must_use]
-    pub fn elements(&self) -> Vec<OpenElement<'a>> {
+    pub fn elements(&self) -> impl Iterator<Item = OpenElement<'a>> + '_ {
         self.open_elements
             .values()
             .into_iter()
             .flatten()
             .map(|e| e.borrow().as_open_element().clone())
-            .collect()
     }
 
     fn insert_into_map(&mut self, position: FilePosition, token: RefXmlToken<'a>, length: usize) {
@@ -290,7 +290,6 @@ impl<'a> ParsedXml<'a> {
                 }
             }
         }
-
         self.tokens.push(token);
     }
 
@@ -485,7 +484,7 @@ impl<'a> XmlParser {
         &self,
         characters: &str,
         string_map: &IndexSet<String, FnvBuildHasher>,
-    ) -> (bool, usize) {
+    ) -> Option<usize> {
         let chars = characters.as_bytes();
         let chars_count = chars.len();
         if self.raw_index + chars_count < self.raw_tokens.len() {
@@ -494,12 +493,12 @@ impl<'a> XmlParser {
                 .zip(chars)
                 .all(|(t, c)| XmlParser::char_match(t, *c, string_map))
             {
-                return (false, 0);
+                return None;
             }
         } else {
-            return (false, 0);
+            return None;
         }
-        (true, chars_count)
+        Some(chars_count)
     }
 
     fn match_next_char(
@@ -735,12 +734,12 @@ impl<'a> XmlParser {
                 }
                 KeyChar(kc) => match kc {
                     b'<' => {
-                        if let (true, char_num) = self.match_next_str("!--", &tokenizer.strings) {
+                        if let Some(char_num) = self.match_next_str("!--", &tokenizer.strings) {
                             self.raw_index += char_num;
                             let position = self.raw_tokens[self.raw_index].position;
                             let mut comment = String::with_capacity(10);
                             while let Some(raw_token) = self.raw_tokens.get(self.raw_index + 1) {
-                                if let (true, ec_char_num) =
+                                if let Some(ec_char_num) =
                                     self.match_next_str("--", &tokenizer.strings)
                                 {
                                     self.raw_index += ec_char_num;
